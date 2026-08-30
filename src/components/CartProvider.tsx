@@ -1,11 +1,19 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { CartItem, CustomerData, Product } from "@/types";
+import { CartItem, Product } from "@/types"; // CustomerData ya no se importa de aquí
 import { Navbar } from "@/components/Navbar";
 import { CartSidebar } from "@/components/CartSidebar";
 import { ProductModal } from "@/components/ProductModal";
 import { CustomerModal } from "@/components/CustomerModal";
+
+// Definición local del tipo para los datos del cliente
+export interface CustomerData {
+  name?: string;
+  address?: string;
+  cedula?: string;
+  phone?: string;
+}
 
 declare global {
   interface Window {
