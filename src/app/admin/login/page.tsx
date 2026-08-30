@@ -2,59 +2,92 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setAdminCookie } from "./actions"; // Server action to set cookie
+import { Lock, User, Loader2, AlertCircle } from "lucide-react";
+import { setAdminCookie } from "./actions";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === "admin" && password === "admin") {
-      await setAdminCookie();
-      router.push("/admin");
-    } else {
-      setError("Credenciales incorrectas");
+    setError("");
+    setLoading(true);
+    try {
+      if (username === "admin" && password === "admin") {
+        await setAdminCookie();
+        router.push("/admin");
+      } else {
+        setError("Credenciales incorrectas");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-gris-fondo p-4">
-      <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full border border-brand-gris-borde">
-        <h2 className="text-2xl font-bold font-baloo text-brand-rey mb-6 text-center">Panel Admin</h2>
-        
-        {error && <div className="bg-[#fdf1f1] text-[#b13e3e] p-3 rounded-xl mb-4 text-sm text-center">{error}</div>}
-        
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-sm font-bold text-brand-rey mb-1">Usuario</label>
-            <input 
-              type="text" 
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2 bg-[#f8fafc] border border-brand-gris-borde rounded-xl focus:border-brand-rey focus:ring-2 focus:ring-brand-rey/10 outline-none"
-              required
-            />
+    <div className="admin-login-page">
+      <svg className="admin-login-clouds" viewBox="0 0 1180 500" preserveAspectRatio="none">
+        <ellipse cx="120" cy="60" rx="90" ry="30" fill="#fff" />
+        <ellipse cx="980" cy="110" rx="110" ry="34" fill="#fff" />
+        <ellipse cx="560" cy="30" rx="60" ry="18" fill="#fff" opacity=".6" />
+      </svg>
+
+      <div className="admin-login-wrap">
+        <div className="admin-login-brand">
+          <div className="admin-login-badge">
+            <span role="img" aria-label="cow">🐮</span>
           </div>
-          <div>
-            <label className="block text-sm font-bold text-brand-rey mb-1">Contraseña</label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 bg-[#f8fafc] border border-brand-gris-borde rounded-xl focus:border-brand-rey focus:ring-2 focus:ring-brand-rey/10 outline-none"
-              required
-            />
-          </div>
-          <button 
-            type="submit"
-            className="w-full bg-brand-rey text-white font-bold py-3 rounded-full mt-2 hover:bg-brand-rey-2 transition-colors"
-          >
-            Ingresar
-          </button>
-        </form>
+          <h1>INV. EL REY 2020</h1>
+          <span>Panel administrativo</span>
+        </div>
+
+        <div className="admin-login-card">
+          <h2>Bienvenido de nuevo</h2>
+          <p>Ingresa tus credenciales para continuar</p>
+
+          {error && (
+            <div className="admin-login-error">
+              <AlertCircle size={16} /> {error}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="admin-login-form">
+            <div className="admin-login-field">
+              <label>Usuario</label>
+              <div className="admin-login-input-wrap">
+                <User size={16} />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="admin-login-field">
+              <label>Contraseña</label>
+              <div className="admin-login-input-wrap">
+                <Lock size={16} />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={loading} className="admin-login-submit">
+              {loading && <Loader2 size={18} className="animate-spin" />}
+              {loading ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
+        </div>
+
+        <a href="/" className="admin-login-back">← Volver al sitio</a>
       </div>
     </div>
   );
