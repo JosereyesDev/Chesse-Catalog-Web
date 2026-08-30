@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CustomerData } from "@/types";
+
+// Definición local del tipo CustomerData
+export interface CustomerData {
+  name?: string;
+  address?: string;
+  cedula?: string;
+  phone?: string;
+}
 
 export function CustomerModal({
   open,

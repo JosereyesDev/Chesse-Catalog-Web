@@ -46,7 +46,6 @@ export function Hero() {
             />
             <div
               style={{ backgroundImage: "url('/images/inv_el_rey.png')" }}
-              alt="Inv. El Rey"
               className="hero-art-image"
             />
           </div>
@@ -67,4 +66,3 @@ export function Hero() {
     </header>
   );
 }
-
