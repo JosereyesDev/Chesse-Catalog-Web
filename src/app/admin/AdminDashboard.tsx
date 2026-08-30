@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, CSSProperties } from "react";
 import { Product } from "@/types";
 import { createClient } from "@/utils/supabase/client";
 import { Plus, Edit2, Trash2, LogOut, Check, Package, Loader2 } from "lucide-react";
@@ -65,8 +65,8 @@ export function AdminDashboard({ initialProducts }: { initialProducts: Product[]
     window.location.href = "/admin/login";
   };
 
-  // Estilos en línea para respaldo (se sobreescriben con Tailwind si está configurado)
-  const inlineStyles = {
+  // Estilos en línea con tipado explícito para evitar errores de TypeScript
+  const inlineStyles: Record<string, CSSProperties> = {
     container: { minHeight: "100vh", backgroundColor: "#f5f2ed", fontFamily: "'Nunito', sans-serif", color: "#161512" },
     header: { backgroundColor: "#0a1a44", color: "white", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" },
     headerTitle: { fontSize: "1.5rem", fontWeight: "bold", display: "flex", alignItems: "center", gap: "8px" },
