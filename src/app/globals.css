@@ -426,13 +426,10 @@ nav.links a.active {
 
 @media (max-width: 980px) {
     .hero-header-inner {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1.15fr .85fr;
         padding-bottom: 30px;
         max-width: 95%;
         gap: 10px;
-    }
-    .hero-art {
-        display: none;
     }
     .hero-header h1.headline {
         font-size: clamp(2.2rem, 7vw, 3.2rem);
@@ -458,6 +455,15 @@ nav.links a.active {
 }
 
 @media (max-width: 768px) {
+    .hero-header-inner {
+        grid-template-columns: 1fr;
+        padding-bottom: 30px;
+        max-width: 95%;
+        gap: 10px;
+    }
+    .hero-art {
+        display: none;
+    }
     .navbar {
         padding: 10px 16px;
     }
@@ -488,12 +494,6 @@ nav.links a.active {
 @media (max-width: 560px) {
     .hero-header h1.headline {
         font-size: clamp(1.8rem, 8vw, 2.4rem);
-    }
-    .hero-header .script-line {
-        font-size: clamp(1.3rem, 6vw, 1.8rem);
-    }
-    .hero-header .wordmark {
-        font-size: clamp(1.6rem, 7vw, 2.4rem);
     }
     .hero-header-inner {
         padding: 10px 16px 20px;
@@ -529,12 +529,6 @@ nav.links a.active {
 @media (max-width: 400px) {
     .hero-header h1.headline {
         font-size: 1.6rem;
-    }
-    .hero-header .script-line {
-        font-size: 1.1rem;
-    }
-    .hero-header .wordmark {
-        font-size: 1.4rem;
     }
     .navbar {
         padding: 8px 12px;
