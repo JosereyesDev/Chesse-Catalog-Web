@@ -356,62 +356,69 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function submitCustomerForm(data: CustomerData) {
-    setSavedCustomer(data);
-    try {
-      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data));
-    } catch {}
-    await sendOrderViaWhatsApp(data);
+  setSavedCustomer(data);
+  try {
+    localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+  await sendOrderViaWhatsApp(data);
+}
+
+async function sendOrderViaWhatsApp(customerData: CustomerData) {
+  setIsSending(true);
+
+  // 1. Generar PDF
+  const doc = generateOrderPDF(cart, customerData);
+  let pdfUrl: string | null = null;
+
+  // 2. Subir PDF a Supabase vía API Route
+  if (doc) {
+    const pdfBlob = doc.output("blob");
+    pdfUrl = await uploadPdfBlob(pdfBlob);
   }
 
-  async function sendOrderViaWhatsApp(customerData: CustomerData) {
-    setIsSending(true);
-
-    const doc = generateOrderPDF(cart, customerData);
-    let pdfUrl: string | null = null;
-
-    if (doc) {
-      const pdfBlob = doc.output("blob");
-      pdfUrl = await uploadPdfBlob(pdfBlob);
-    }
-
-    let message = "🧀 *Nuevo Pedido - Lácteos*%0A%0A";
-    message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}%0A%0A`;
-    if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
-      message += `👤 *Datos del cliente:*%0A`;
-      if (customerData.name) message += `Nombre: ${encodeURIComponent(customerData.name)}%0A`;
-      if (customerData.cedula) message += `Cédula: ${encodeURIComponent(customerData.cedula)}%0A`;
-      if (customerData.phone) message += `Teléfono: ${encodeURIComponent(customerData.phone)}%0A`;
-      if (customerData.address) message += `Dirección: ${encodeURIComponent(customerData.address)}%0A%0A`;
-    }
-
-    message += `📋 *Detalle del pedido:*%0A━━━━━━━━━━━━━━━━%0A`;
-    cart.forEach((item, index) => {
-      const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
-      const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
-      const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
-      message += `${index + 1}. *${encodeURIComponent(item.product.name)}*${weightDisplay}%0A`;
-      message += `   Cantidad: ${displayQty} ${unitLabel}%0A`;
-      message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $%0A%0A`;
-    });
-    message += `━━━━━━━━━━━━━━━━%0A`;
-    message += `📦 *Productos: ${cart.length}*%0A`;
-    message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*%0A`;
-    message += `💰 *TOTAL: ${total.toFixed(2)} $*%0A%0A`;
-
-    if (pdfUrl) {
-      message += `📄 *Factura/PDF adjunto:* ${pdfUrl}%0A%0A`;
-    }
-
-    message += `✨ Quedo atento a la confirmación de la entrega.`;
-
-    // Redirección directa al número de teléfono especificado
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank");
-
-    setIsSending(false);
-    setCart([]);
-    setCustomerModalOpen(false);
-    setIsSidebarOpen(false);
+  // 3. Armar el mensaje de texto para WhatsApp
+  let message = "🧀 *Nuevo Pedido - Lácteos*\n\n";
+  message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}\n\n`;
+  if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
+    message += `👤 *Datos del cliente:*\n`;
+    if (customerData.name) message += `Nombre: ${customerData.name}\n`;
+    if (customerData.cedula) message += `Cédula: ${customerData.cedula}\n`;
+    if (customerData.phone) message += `Teléfono: ${customerData.phone}\n`;
+    if (customerData.address) message += `Dirección: ${customerData.address}\n\n`;
   }
+
+  message += `📋 *Detalle del pedido:*\n━━━━━━━━━━━━━━━━\n`;
+  cart.forEach((item, index) => {
+    const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
+    const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
+    const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
+    message += `${index + 1}. *${item.product.name}*${weightDisplay}\n`;
+    message += `   Cantidad: ${displayQty} ${unitLabel}\n`;
+    message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $\n\n`;
+  });
+  message += `━━━━━━━━━━━━━━━━\n`;
+  message += `📦 *Productos: ${cart.length}*\n`;
+  message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
+  message += `💰 *TOTAL: ${total.toFixed(2)} $\n\n`;
+
+  if (pdfUrl) {
+    message += `📄 *Factura/PDF en línea:* ${pdfUrl}\n\n`;
+  }
+
+  message += `✨ Quedo atento a la confirmación de la entrega.`;
+
+  // 4. Redirección garantizada en teléfonos móviles
+  const encodedMessage = encodeURIComponent(message);
+  const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
+
+  setIsSending(false);
+  setCart([]);
+  setCustomerModalOpen(false);
+  setIsSidebarOpen(false);
+
+  // Redirigir la ventana actual evita bloqueos de pop-ups en Safari y Chrome móvil
+  window.location.href = whatsappAppUrl;
+}
 
   return (
     <>
