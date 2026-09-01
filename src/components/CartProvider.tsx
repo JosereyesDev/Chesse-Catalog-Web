@@ -1,13 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { CartItem, Product } from "@/types"; // CustomerData ya no se importa de aquí
+import { CartItem, Product } from "@/types";
 import { Navbar } from "@/components/Navbar";
 import { CartSidebar } from "@/components/CartSidebar";
 import { ProductModal } from "@/components/ProductModal";
 import { CustomerModal } from "@/components/CustomerModal";
 
-// Definición local del tipo para los datos del cliente
 export interface CustomerData {
   name?: string;
   address?: string;
@@ -207,12 +206,34 @@ function generateOrderPDF(cart: CartItem[], customerData: CustomerData) {
   return doc;
 }
 
+// Subida de PDF en línea sin backend
+async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
+  try {
+    const formData = new FormData();
+    formData.append("file", pdfBlob, `pedido_lacteos_${Date.now()}.pdf`);
+
+    // Petición local a tu propia API en Next.js
+    const res = await fetch("/api/upload-pdf", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.link || null;
+  } catch (error) {
+    console.error("Error al subir el PDF:", error);
+    return null;
+  }
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [savedCustomer, setSavedCustomer] = useState<CustomerData | null>(null);
+  const [isSending, setIsSending] = useState(false); // Estado para feedback al usuario
   const [toast, setToast] = useState({ show: false, title: "", qtyLabel: "", weight: "0.00", subtotal: "0.00 $" });
   const [totalBumpKey, setTotalBumpKey] = useState(0);
   const [badgeBumpKey, setBadgeBumpKey] = useState(0);
@@ -222,7 +243,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const prevTotal = useRef(0);
   const prevCount = useRef(0);
 
-  // Load persisted cart & customer data
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CART_STORAGE_KEY);
@@ -336,89 +356,64 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setIsSidebarOpen(true);
   }
 
-  function submitCustomerForm(data: CustomerData) {
+  async function submitCustomerForm(data: CustomerData) {
     setSavedCustomer(data);
     try {
       localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data));
     } catch {}
-    sendOrderViaWhatsApp(data);
+    await sendOrderViaWhatsApp(data);
   }
 
   async function sendOrderViaWhatsApp(customerData: CustomerData) {
-  const doc = generateOrderPDF(cart, customerData);
+    setIsSending(true);
 
-  // 1. Armar el mensaje de texto estructurado
-  let message = "🧀 *Nuevo Pedido - Lácteos*\n\n";
-  message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}\n\n`;
-  if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
-    message += `👤 *Datos del cliente:*\n`;
-    if (customerData.name) message += `Nombre: ${customerData.name}\n`;
-    if (customerData.cedula) message += `Cédula: ${customerData.cedula}\n`;
-    if (customerData.phone) message += `Teléfono: ${customerData.phone}\n`;
-    if (customerData.address) message += `Dirección: ${customerData.address}\n`;
-    message += `\n`;
-  }
-  message += `📋 *Detalle del pedido:*\n━━━━━━━━━━━━━━━━\n`;
-  cart.forEach((item, index) => {
-    const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
-    const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
-    const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
-    message += `${index + 1}. *${item.product.name}*${weightDisplay}\n`;
-    message += `   Cantidad: ${displayQty} ${unitLabel}\n`;
-    message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $\n\n`;
-  });
-  message += `━━━━━━━━━━━━━━━━\n`;
-  message += `📦 *Productos: ${cart.length}*\n`;
-  message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
-  message += `💰 *TOTAL: ${total.toFixed(2)} $\n\n`;
-  message += `✨ Gracias por tu compra! ✨`;
+    const doc = generateOrderPDF(cart, customerData);
+    let pdfUrl: string | null = null;
 
-  // 2. Intentar compartir el archivo directamente vía Web Share API
-  if (doc && typeof navigator !== "undefined" && navigator.canShare) {
-    try {
+    if (doc) {
       const pdfBlob = doc.output("blob");
-      const pdfFile = new File(
-        [pdfBlob],
-        `pedido_lacteos_${new Date().toISOString().slice(0, 10)}.pdf`,
-        { type: "application/pdf" }
-      );
-
-      if (navigator.canShare({ files: [pdfFile] })) {
-        await navigator.share({
-          files: [pdfFile],
-          title: "Nuevo Pedido",
-          text: message,
-        });
-
-        // Limpieza de estado al completar el envío exitoso
-        setCart([]);
-        setCustomerModalOpen(false);
-        setIsSidebarOpen(false);
-        return;
-      }
-    } catch (error) {
-      console.log("Web Share cancelado o no soportado, ejecutando respaldo por URL.");
+      pdfUrl = await uploadPdfBlob(pdfBlob);
     }
+
+    let message = "🧀 *Nuevo Pedido - Lácteos*%0A%0A";
+    message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}%0A%0A`;
+    if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
+      message += `👤 *Datos del cliente:*%0A`;
+      if (customerData.name) message += `Nombre: ${encodeURIComponent(customerData.name)}%0A`;
+      if (customerData.cedula) message += `Cédula: ${encodeURIComponent(customerData.cedula)}%0A`;
+      if (customerData.phone) message += `Teléfono: ${encodeURIComponent(customerData.phone)}%0A`;
+      if (customerData.address) message += `Dirección: ${encodeURIComponent(customerData.address)}%0A%0A`;
+    }
+
+    message += `📋 *Detalle del pedido:*%0A━━━━━━━━━━━━━━━━%0A`;
+    cart.forEach((item, index) => {
+      const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
+      const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
+      const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
+      message += `${index + 1}. *${encodeURIComponent(item.product.name)}*${weightDisplay}%0A`;
+      message += `   Cantidad: ${displayQty} ${unitLabel}%0A`;
+      message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $%0A%0A`;
+    });
+    message += `━━━━━━━━━━━━━━━━%0A`;
+    message += `📦 *Productos: ${cart.length}*%0A`;
+    message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*%0A`;
+    message += `💰 *TOTAL: ${total.toFixed(2)} $*%0A%0A`;
+
+    if (pdfUrl) {
+      message += `📄 *Factura/PDF adjunto:* ${pdfUrl}%0A%0A`;
+    }
+
+    message += `✨ Quedo atento a la confirmación de la entrega.`;
+
+    // Redirección directa al número de teléfono especificado
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank");
+
+    setIsSending(false);
+    setCart([]);
+    setCustomerModalOpen(false);
+    setIsSidebarOpen(false);
   }
 
-  // 3. Fallback: Enlace directo wa.me + descarga local si la API nativa no responde
-  const encodedText = encodeURIComponent(message);
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodedText}`, "_blank");
-
-  if (doc) {
-    const pdfUri = doc.output("datauristring");
-    const link = document.createElement("a");
-    link.href = pdfUri;
-    link.download = `pedido_lacteos_${new Date().toISOString().slice(0, 10)}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-
-  setCart([]);
-  setCustomerModalOpen(false);
-  setIsSidebarOpen(false);
-}
   return (
     <>
       <Navbar cartCount={count} onCartClick={() => setIsSidebarOpen((o) => !o)} />
@@ -426,6 +421,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       <CartContext.Provider value={{ cart, openProductModal }}>
         {children}
       </CartContext.Provider>
+
+      {/* Indicador de carga si está subiendo el PDF */}
+      {isSending && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          flexDirection: "column",
+          gap: "1rem"
+        }}>
+          <div className="spinner" style={{
+            width: "40px",
+            height: "40px",
+            border: "4px solid #f3f3f3",
+            borderTop: "4px solid #ffc72c",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite"
+          }}></div>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <p style={{ fontWeight: "bold" }}>Generando enlace del PDF y abriendo WhatsApp...</p>
+        </div>
+      )}
 
       {/* Toast */}
       <div className={`fab-toast ${toast.show ? "show" : ""}`}>
