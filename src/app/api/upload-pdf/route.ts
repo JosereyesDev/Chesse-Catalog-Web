@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Inicializa el cliente de Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Usar la Service Role Key en el servidor salta la política RLS sin problemas
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(req: Request) {
   try {
@@ -15,10 +16,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No se recibió ningún archivo" }, { status: 400 });
     }
 
-    // Nombre único para el archivo
     const fileName = `pedido_${Date.now()}_${Math.floor(Math.random() * 1000)}.pdf`;
 
-    // 1. Subir el PDF al bucket 'pedidos_temp'
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("pedidos_temp")
       .upload(fileName, file, {
@@ -31,7 +30,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    // 2. Obtener la URL Pública
     const { data: publicUrlData } = supabase.storage
       .from("pedidos_temp")
       .getPublicUrl(fileName);
