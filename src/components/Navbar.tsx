@@ -82,7 +82,6 @@ export function Navbar({
 
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
-    setMobileOpen(false);
 
     // 1. Activamos la bandera para bloquear la detección automática mientras viaja la pantalla
     isClickScrollRef.current = true;
@@ -93,10 +92,20 @@ export function Navbar({
     const element = document.getElementById(targetId);
     if (!element) return;
 
-    const headerElement = document.querySelector(".site-header");
-    const navOffset = headerElement ? headerElement.getBoundingClientRect().height : 0;
+    // Medimos solo la barra superior (.navbar), NO el <header> completo.
+    // Si midiéramos ".site-header" aquí, en móvil incluiría también la altura
+    // del menú desplegable (todavía abierto en este punto, porque React no
+    // actualiza el DOM de forma síncrona al llamar a setMobileOpen). Eso
+    // generaba un offset más grande de lo real y el scroll quedaba
+    // desalineado. La altura de ".navbar" no cambia al abrir/cerrar el menú
+    // móvil, así que el cálculo es consistente en cualquier tamaño de pantalla.
+    const navbarElement = document.querySelector(".navbar");
+    const navOffset = navbarElement ? navbarElement.getBoundingClientRect().height : 0;
 
     const targetPosition = element.getBoundingClientRect().top + window.pageYOffset - navOffset;
+
+    // Cerramos el menú móvil después de calcular la posición.
+    setMobileOpen(false);
 
     const DURATION_MS = 1200;
     smoothScrollTo(targetPosition, DURATION_MS);

@@ -221,6 +221,7 @@ export function AdminDashboard({ initialProducts }: { initialProducts: Product[]
           <ProductFormModal
             product={isEditing}
             saving={saving}
+            supabase={supabase}
             onCancel={() => setIsEditing(null)}
             onSubmit={handleSave}
           />
@@ -359,16 +360,64 @@ function StatCard({
 function ProductFormModal({
   product,
   saving,
+  supabase,
   onCancel,
   onSubmit,
 }: {
   product: Product;
   saving: boolean;
+  supabase: ReturnType<typeof createClient> | null;
   onCancel: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }) {
-  const [imagePreview, setImagePreview] = useState(product.image || "");
+  const [image, setImage] = useState(product.image || "");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const isEditingExisting = !!product.id;
+
+  const IMAGE_BUCKET = "products";
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!supabase) {
+      setUploadError("Sin conexión a la base de datos");
+      e.target.value = "";
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setUploadError("El archivo debe ser una imagen");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      setUploadError("La imagen no debe superar 5MB");
+      e.target.value = "";
+      return;
+    }
+
+    setUploadError("");
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "jpg";
+      const fileName = `${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from(IMAGE_BUCKET)
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
+      if (uploadErr) throw uploadErr;
+
+      const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(fileName);
+      setImage(data.publicUrl);
+    } catch (err) {
+      console.error(err);
+      setUploadError("No se pudo subir la imagen. Verifica que el bucket \"products\" exista y sea público.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
   return (
     <div
@@ -412,28 +461,57 @@ function ProductFormModal({
             </div>
 
             <div className="admin-form-group span-2">
-              <label>URL de Imagen</label>
+              <label>Imagen</label>
               <div className="admin-image-row">
                 <div className="admin-image-preview">
-                  {imagePreview ? (
+                  {uploading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={imagePreview}
-                      alt="Vista previa"
-                      onError={() => setImagePreview("")}
-                    />
+                    <img src={image} alt="Vista previa" onError={() => setImage("")} />
                   ) : (
                     <ImageOff size={18} />
                   )}
                 </div>
-                <input
-                  name="image"
-                  type="text"
-                  defaultValue={product.image || ""}
-                  onChange={(e) => setImagePreview(e.target.value)}
-                  placeholder="https://..."
-                  style={{ flex: 1 }}
-                />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <input
+                    name="image"
+                    type="text"
+                    value={image}
+                    onChange={(e) => {
+                      setImage(e.target.value);
+                      setUploadError("");
+                    }}
+                    placeholder="https://... o sube un archivo"
+                  />
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 13,
+                      padding: "6px 10px",
+                      border: "1px dashed #cbd5e1",
+                      borderRadius: 6,
+                      cursor: uploading ? "not-allowed" : "pointer",
+                      color: "#475569",
+                      width: "fit-content",
+                    }}
+                  >
+                    {uploading && <Loader2 size={14} className="animate-spin" />}
+                    {uploading ? "Subiendo..." : "Subir imagen desde tu dispositivo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  {uploadError && (
+                    <span style={{ color: "var(--danger, #dc2626)", fontSize: 12 }}>{uploadError}</span>
+                  )}
+                </div>
               </div>
             </div>
 
