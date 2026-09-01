@@ -210,9 +210,8 @@ function generateOrderPDF(cart: CartItem[], customerData: CustomerData) {
 async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
   try {
     const formData = new FormData();
-    formData.append("file", pdfBlob, `pedido_lacteos_${Date.now()}.pdf`);
+    formData.append("file", pdfBlob, `pedido_${Date.now()}.pdf`);
 
-    // Petición local a tu propia API en Next.js
     const res = await fetch("/api/upload-pdf", {
       method: "POST",
       body: formData,
