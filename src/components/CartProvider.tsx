@@ -344,51 +344,81 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     sendOrderViaWhatsApp(data);
   }
 
-  function sendOrderViaWhatsApp(customerData: CustomerData) {
-    const doc = generateOrderPDF(cart, customerData);
+  async function sendOrderViaWhatsApp(customerData: CustomerData) {
+  const doc = generateOrderPDF(cart, customerData);
 
-    let message = "🧀 *Nuevo Pedido - Lácteos*%0A%0A";
-    message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}%0A%0A`;
-    if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
-      message += `👤 *Datos del cliente:*%0A`;
-      if (customerData.name) message += `Nombre: ${encodeURIComponent(customerData.name)}%0A`;
-      if (customerData.cedula) message += `Cédula: ${encodeURIComponent(customerData.cedula)}%0A`;
-      if (customerData.phone) message += `Teléfono: ${encodeURIComponent(customerData.phone)}%0A`;
-      if (customerData.address) message += `Dirección: ${encodeURIComponent(customerData.address)}%0A`;
-      message += `%0A`;
+  // 1. Armar el mensaje de texto estructurado
+  let message = "🧀 *Nuevo Pedido - Lácteos*\n\n";
+  message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}\n\n`;
+  if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
+    message += `👤 *Datos del cliente:*\n`;
+    if (customerData.name) message += `Nombre: ${customerData.name}\n`;
+    if (customerData.cedula) message += `Cédula: ${customerData.cedula}\n`;
+    if (customerData.phone) message += `Teléfono: ${customerData.phone}\n`;
+    if (customerData.address) message += `Dirección: ${customerData.address}\n`;
+    message += `\n`;
+  }
+  message += `📋 *Detalle del pedido:*\n━━━━━━━━━━━━━━━━\n`;
+  cart.forEach((item, index) => {
+    const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
+    const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
+    const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
+    message += `${index + 1}. *${item.product.name}*${weightDisplay}\n`;
+    message += `   Cantidad: ${displayQty} ${unitLabel}\n`;
+    message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $\n\n`;
+  });
+  message += `━━━━━━━━━━━━━━━━\n`;
+  message += `📦 *Productos: ${cart.length}*\n`;
+  message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
+  message += `💰 *TOTAL: ${total.toFixed(2)} $\n\n`;
+  message += `✨ Gracias por tu compra! ✨`;
+
+  // 2. Intentar compartir el archivo directamente vía Web Share API
+  if (doc && typeof navigator !== "undefined" && navigator.canShare) {
+    try {
+      const pdfBlob = doc.output("blob");
+      const pdfFile = new File(
+        [pdfBlob],
+        `pedido_lacteos_${new Date().toISOString().slice(0, 10)}.pdf`,
+        { type: "application/pdf" }
+      );
+
+      if (navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: "Nuevo Pedido",
+          text: message,
+        });
+
+        // Limpieza de estado al completar el envío exitoso
+        setCart([]);
+        setCustomerModalOpen(false);
+        setIsSidebarOpen(false);
+        return;
+      }
+    } catch (error) {
+      console.log("Web Share cancelado o no soportado, ejecutando respaldo por URL.");
     }
-    message += `📋 *Detalle del pedido:*%0A━━━━━━━━━━━━━━━━%0A`;
-    cart.forEach((item, index) => {
-      const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
-      const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
-      const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
-      message += `${index + 1}. *${item.product.name}*${weightDisplay}%0A`;
-      message += `   Cantidad: ${displayQty} ${unitLabel}%0A`;
-      message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $%0A%0A`;
-    });
-    message += `━━━━━━━━━━━━━━━━%0A`;
-    message += `📦 *Productos: ${cart.length}*%0A`;
-    message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*%0A`;
-    message += `💰 *TOTAL: ${total.toFixed(2)} $*%0A%0A`;
-    message += `✨ Gracias por tu compra! ✨`;
-
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank");
-
-    if (doc) {
-      const pdfUri = doc.output("datauristring");
-      const link = document.createElement("a");
-      link.href = pdfUri;
-      link.download = `pedido_lacteos_${new Date().toISOString().slice(0, 10)}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    setCart([]);
-    setCustomerModalOpen(false);
-    setIsSidebarOpen(false);
   }
 
+  // 3. Fallback: Enlace directo wa.me + descarga local si la API nativa no responde
+  const encodedText = encodeURIComponent(message);
+  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodedText}`, "_blank");
+
+  if (doc) {
+    const pdfUri = doc.output("datauristring");
+    const link = document.createElement("a");
+    link.href = pdfUri;
+    link.download = `pedido_lacteos_${new Date().toISOString().slice(0, 10)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  setCart([]);
+  setCustomerModalOpen(false);
+  setIsSidebarOpen(false);
+}
   return (
     <>
       <Navbar cartCount={count} onCartClick={() => setIsSidebarOpen((o) => !o)} />
