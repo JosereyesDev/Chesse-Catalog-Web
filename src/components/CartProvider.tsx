@@ -206,13 +206,13 @@ function generateOrderPDF(cart: CartItem[], customerData: CustomerData) {
   return doc;
 }
 
-// Subida de PDF en línea sin backend
+// Subida de PDF en línea hacia la API Route corregida
 async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
   try {
     const formData = new FormData();
     formData.append("file", pdfBlob, `pedido_${Date.now()}.pdf`);
 
-    const res = await fetch("/api/upload", {
+    const res = await fetch("/api/upload-pdf", {
       method: "POST",
       body: formData,
     });
