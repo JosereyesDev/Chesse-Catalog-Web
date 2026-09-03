@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-// Usar la Service Role Key en el servidor salta la política RLS sin problemas
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -16,9 +15,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No se recibió ningún archivo" }, { status: 400 });
     }
 
-    const fileName = `pedido_${Date.now()}_${Math.floor(Math.random() * 1000)}.pdf`;
+    // Generamos un ID único y limpio para la URL
+    const fileId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const fileName = `pedido_${fileId}.pdf`;
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("pedidos_temp")
       .upload(fileName, file, {
         contentType: "application/pdf",
@@ -30,11 +31,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from("pedidos_temp")
-      .getPublicUrl(fileName);
+    // Construimos la URL limpia usando el dominio actual
+    const origin = req.headers.get("origin") || "https://tudominio.com";
+    const cleanUrl = `${origin}/pedido/${fileId}`;
 
-    return NextResponse.json({ link: publicUrlData.publicUrl });
+    return NextResponse.json({ link: cleanUrl });
   } catch (error) {
     console.error("Error en servidor:", error);
     return NextResponse.json({ error: "Error interno procesando la subida" }, { status: 500 });
