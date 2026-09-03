@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// ⚠️ Usamos solo la SERVICE ROLE KEY para operaciones de escritura
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function GET() {
   return NextResponse.json(
@@ -17,17 +17,28 @@ export async function POST(req: Request) {
   console.log("[POST /api/upload-pdf] Iniciando subida...");
 
   try {
-    // 1. Validar variables de entorno
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("[POST] Faltan variables de entorno de Supabase");
+    // Validar variables de entorno
+    if (!supabaseUrl) {
+      console.error("[POST] Faltan NEXT_PUBLIC_SUPABASE_URL");
       return NextResponse.json(
-        { error: "Error de configuración en el servidor" },
+        { error: "Error de configuración: URL de Supabase no definida" },
         { status: 500 }
       );
     }
-    console.log("[POST] Variables de entorno OK");
 
+    if (!supabaseServiceKey) {
+      console.error("[POST] Faltan SUPABASE_SERVICE_ROLE_KEY");
+      return NextResponse.json(
+        { error: "Error de configuración: clave de servicio no definida. Asegúrate de configurar SUPABASE_SERVICE_ROLE_KEY en Vercel." },
+        { status: 500 }
+      );
+    }
+
+    console.log("[POST] Variables de entorno OK, usando SERVICE ROLE KEY");
+
+    // Crear cliente con la clave de servicio
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     const formData = await req.formData();
     const file = formData.get("file") as File;
 
@@ -42,7 +53,7 @@ export async function POST(req: Request) {
     const fileName = `pedido_${fileId}.pdf`;
     console.log(`[POST] Nombre de archivo generado: ${fileName}`);
 
-    // 2. Subir a Supabase
+    // Subir a Supabase
     const { error: uploadError } = await supabase.storage
       .from("pedidos_temp")
       .upload(fileName, file, {
@@ -53,15 +64,14 @@ export async function POST(req: Request) {
     if (uploadError) {
       console.error("[POST] Error al subir a Supabase:", uploadError);
       return NextResponse.json(
-        { error: `Supabase upload error: ${uploadError.message}` },
+        { error: `Supabase upload error: ${uploadError.message} (code: ${uploadError.code})` },
         { status: 500 }
       );
     }
 
     console.log(`[POST] Archivo subido exitosamente: ${fileName}`);
 
-    // 3. Construir URL pública de redirección (evitamos depender de cabeceras)
-    // Usamos la variable de entorno VERCEL_URL si existe, o construimos con cabeceras
+    // Construir URL pública de redirección
     let baseUrl: string;
     if (process.env.VERCEL_URL) {
       baseUrl = `https://${process.env.VERCEL_URL}`;
