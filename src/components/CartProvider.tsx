@@ -206,25 +206,44 @@ function generateOrderPDF(cart: CartItem[], customerData: CustomerData) {
   return doc;
 }
 
-// Subida de PDF en línea hacia la API Route corregida
+// Subida de PDF con logs detallados
 async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
   try {
+    console.log("[uploadPdfBlob] Iniciando subida, tamaño del blob:", pdfBlob.size);
+
     const formData = new FormData();
     formData.append("file", pdfBlob, `pedido_${Date.now()}.pdf`);
 
+    console.log("[uploadPdfBlob] Enviando POST a /api/upload-pdf");
     const res = await fetch("/api/upload-pdf", {
       method: "POST",
       body: formData,
     });
 
+    console.log("[uploadPdfBlob] Respuesta recibida, status:", res.status);
+
     if (!res.ok) {
-      console.error("Error al subir el PDF, status:", res.status);
+      const errorText = await res.text();
+      console.error("[uploadPdfBlob] Error en la respuesta:", res.status, errorText);
       return null;
     }
+
     const data = await res.json();
-    return data.link || null;
+    console.log("[uploadPdfBlob] Datos de la API:", data);
+
+    // Si la API devuelve el campo link, lo usamos; si no, probamos con supabaseUrl
+    if (data.link) {
+      console.log("[uploadPdfBlob] Link obtenido:", data.link);
+      return data.link;
+    } else if (data.supabaseUrl) {
+      console.log("[uploadPdfBlob] Usando URL directa de Supabase:", data.supabaseUrl);
+      return data.supabaseUrl;
+    } else {
+      console.error("[uploadPdfBlob] No se recibió link ni supabaseUrl en la respuesta");
+      return null;
+    }
   } catch (error) {
-    console.error("Error al subir el PDF:", error);
+    console.error("[uploadPdfBlob] Excepción:", error);
     return null;
   }
 }
@@ -371,12 +390,24 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
 
   // 1. Generar PDF
   const doc = generateOrderPDF(cart, customerData);
+  console.log("[sendOrderViaWhatsApp] Generando PDF...");
   let pdfUrl: string | null = null;
+
 
   // 2. Subir PDF a Supabase vía API Route
   if (doc) {
     const pdfBlob = doc.output("blob");
     pdfUrl = await uploadPdfBlob(pdfBlob);
+  }
+
+  if (doc) {
+    console.log("[sendOrderViaWhatsApp] PDF generado correctamente");
+    const pdfBlob = doc.output("blob");
+    console.log("[sendOrderViaWhatsApp] Tamaño del PDF blob:", pdfBlob.size);
+    pdfUrl = await uploadPdfBlob(pdfBlob);
+    console.log("[sendOrderViaWhatsApp] URL obtenida de uploadPdfBlob:", pdfUrl);
+  } else {
+    console.warn("[sendOrderViaWhatsApp] No se pudo generar el PDF");
   }
 
   // 3. Armar el mensaje de texto para WhatsApp

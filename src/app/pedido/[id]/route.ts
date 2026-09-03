@@ -12,22 +12,29 @@ export async function GET(
 ) {
   const fileId = params.id;
 
+  console.log("[pedido/[id]] GET recibido para ID:", fileId);
+  console.log("[pedido/[id]] Supabase URL:", supabaseUrl);
+  console.log("[pedido/[id]] Key exists:", !!supabaseServiceKey);
+
   if (!fileId) {
+    console.error("[pedido/[id]] ID no válido");
     return new NextResponse("ID de pedido no válido", { status: 400 });
   }
 
-  // Nombre exacto con el que se guardó en Supabase
   const fileName = `pedido_${fileId}.pdf`;
+  console.log("[pedido/[id]] Nombre del archivo buscado:", fileName);
 
-  // Obtener la URL pública de Supabase
   const { data } = supabase.storage
     .from("pedidos_temp")
     .getPublicUrl(fileName);
 
+  console.log("[pedido/[id]] Datos obtenidos de getPublicUrl:", data);
+
   if (!data?.publicUrl) {
+    console.error("[pedido/[id]] No se encontró URL pública para:", fileName);
     return new NextResponse("Pedido no encontrado o expirado", { status: 404 });
   }
 
-  // Redirigir directamente al PDF real en Supabase
+  console.log("[pedido/[id]] Redirigiendo a:", data.publicUrl);
   return NextResponse.redirect(data.publicUrl);
 }
