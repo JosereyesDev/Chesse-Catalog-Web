@@ -15,7 +15,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No se recibió ningún archivo" }, { status: 400 });
     }
 
-    // Generamos un ID único y limpio para la URL
     const fileId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const fileName = `pedido_${fileId}.pdf`;
 
@@ -31,9 +30,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    // Construimos la URL limpia usando el dominio actual
-    const origin = req.headers.get("origin") || "https://tudominio.com";
-    const cleanUrl = `${origin}/pedido/${fileId}`;
+    // Detectar el protocolo (http/https) y el host exacto de la petición
+    const host = req.headers.get("host") || "localhost:3000";
+    const protocol = host.includes("localhost") ? "http" : "https";
+    
+    // Construir la URL garantizada sin fallas en móviles
+    const cleanUrl = `${protocol}://${host}/pedido/${fileId}`;
 
     return NextResponse.json({ link: cleanUrl });
   } catch (error) {

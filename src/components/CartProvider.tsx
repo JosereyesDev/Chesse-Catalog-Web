@@ -401,15 +401,21 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
   message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
   message += `💰 *TOTAL: ${total.toFixed(2)} $\n\n`;
 
-  if (pdfUrl) {
-    message += `📄 *Factura/PDF en línea:* ${pdfUrl}\n\n`;
-  }
+  // En tu CartProvider.tsx al armar el mensaje:
 
-  message += `✨ Quedo atento a la confirmación de la entrega.`;
+if (pdfUrl) {
+  message += `📄 *Ver nota de entrega (PDF):*\n${pdfUrl}\n\n`;
+} else {
+  console.warn("No se pudo obtener la URL del PDF para el mensaje");
+}
 
-  // 4. Redirección garantizada en teléfonos móviles
-  const encodedMessage = encodeURIComponent(message);
-  const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
+message += `✨ Quedo atento a la confirmación de la entrega.`;
+
+// Usar encodeURIComponent para evitar que caracteres especiales rompan el link en teléfonos
+const encodedMessage = encodeURIComponent(message);
+const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
+
+window.location.href = whatsappAppUrl;
 
   setIsSending(false);
   setCart([]);
