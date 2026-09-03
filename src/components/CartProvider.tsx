@@ -212,12 +212,15 @@ async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
     const formData = new FormData();
     formData.append("file", pdfBlob, `pedido_${Date.now()}.pdf`);
 
-    const res = await fetch("/api/upload-pdf", {
+    const res = await fetch("/api/upload", {
       method: "POST",
       body: formData,
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("Error al subir el PDF, status:", res.status);
+      return null;
+    }
     const data = await res.json();
     return data.link || null;
   } catch (error) {
@@ -399,23 +402,19 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
   message += `━━━━━━━━━━━━━━━━\n`;
   message += `📦 *Productos: ${cart.length}*\n`;
   message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
-  message += `💰 *TOTAL: ${total.toFixed(2)} $\n\n`;
+  message += `💰 *TOTAL: ${total.toFixed(2)} $*\n\n`;
 
-  // En tu CartProvider.tsx al armar el mensaje:
+  if (pdfUrl) {
+    message += `📄 *Ver nota de entrega (PDF):*\n${pdfUrl}\n\n`;
+  } else {
+    console.warn("No se pudo obtener la URL del PDF para el mensaje");
+  }
 
-if (pdfUrl) {
-  message += `📄 *Ver nota de entrega (PDF):*\n${pdfUrl}\n\n`;
-} else {
-  console.warn("No se pudo obtener la URL del PDF para el mensaje");
-}
+  message += `✨ Quedo atento a la confirmación de la entrega.`;
 
-message += `✨ Quedo atento a la confirmación de la entrega.`;
-
-// Usar encodeURIComponent para evitar que caracteres especiales rompan el link en teléfonos
-const encodedMessage = encodeURIComponent(message);
-const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
-
-window.location.href = whatsappAppUrl;
+  // Usar encodeURIComponent para evitar que caracteres especiales rompan el link en teléfonos
+  const encodedMessage = encodeURIComponent(message);
+  const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
 
   setIsSending(false);
   setCart([]);
