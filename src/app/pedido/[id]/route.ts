@@ -6,35 +6,35 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// ✅ Firma corregida: params es una Promesa
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const fileId = params.id;
+  try {
+    const { id: fileId } = await params; // 👈 await para resolver la promesa
 
-  console.log("[pedido/[id]] GET recibido para ID:", fileId);
-  console.log("[pedido/[id]] Supabase URL:", supabaseUrl);
-  console.log("[pedido/[id]] Key exists:", !!supabaseServiceKey);
+    if (!fileId) {
+      console.warn("[GET /pedido] ID no proporcionado");
+      return new NextResponse("ID de pedido no válido", { status: 400 });
+    }
 
-  if (!fileId) {
-    console.error("[pedido/[id]] ID no válido");
-    return new NextResponse("ID de pedido no válido", { status: 400 });
+    const fileName = `pedido_${fileId}.pdf`;
+    console.log(`[GET /pedido] Buscando archivo: ${fileName}`);
+
+    const { data } = supabase.storage
+      .from("pedidos_temp")
+      .getPublicUrl(fileName);
+
+    if (!data?.publicUrl) {
+      console.warn(`[GET /pedido] No se encontró URL pública para ${fileName}`);
+      return new NextResponse("Pedido no encontrado o expirado", { status: 404 });
+    }
+
+    console.log(`[GET /pedido] Redirigiendo a: ${data.publicUrl}`);
+    return NextResponse.redirect(data.publicUrl);
+  } catch (error) {
+    console.error("[GET /pedido] Error inesperado:", error);
+    return new NextResponse("Error interno del servidor", { status: 500 });
   }
-
-  const fileName = `pedido_${fileId}.pdf`;
-  console.log("[pedido/[id]] Nombre del archivo buscado:", fileName);
-
-  const { data } = supabase.storage
-    .from("pedidos_temp")
-    .getPublicUrl(fileName);
-
-  console.log("[pedido/[id]] Datos obtenidos de getPublicUrl:", data);
-
-  if (!data?.publicUrl) {
-    console.error("[pedido/[id]] No se encontró URL pública para:", fileName);
-    return new NextResponse("Pedido no encontrado o expirado", { status: 404 });
-  }
-
-  console.log("[pedido/[id]] Redirigiendo a:", data.publicUrl);
-  return NextResponse.redirect(data.publicUrl);
 }

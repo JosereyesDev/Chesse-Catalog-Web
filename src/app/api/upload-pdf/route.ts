@@ -5,9 +5,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-console.log("[API upload-pdf] Inicializando con URL:", supabaseUrl);
-console.log("[API upload-pdf] Key presente:", !!supabaseServiceKey);
-
 export async function GET() {
   return NextResponse.json(
     { message: "Endpoint activo. Envía una petición POST con el archivo PDF." },
@@ -16,45 +13,37 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  console.log("[API upload-pdf] POST recibido");
+  const startTime = Date.now();
+  console.log("[POST /api/upload-pdf] Iniciando subida...");
 
   try {
     // 1. Validar variables de entorno
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("[API upload-pdf] ERROR: Faltan variables de entorno");
+      console.error("[POST] Faltan variables de entorno de Supabase");
       return NextResponse.json(
         { error: "Error de configuración en el servidor" },
         { status: 500 }
       );
     }
+    console.log("[POST] Variables de entorno OK");
 
-    // 2. Crear cliente Supabase
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    console.log("[API upload-pdf] Cliente Supabase creado");
-
-    // 3. Obtener el archivo del FormData
     const formData = await req.formData();
     const file = formData.get("file") as File;
 
     if (!file) {
-      console.error("[API upload-pdf] No se recibió ningún archivo");
+      console.warn("[POST] No se recibió ningún archivo");
       return NextResponse.json({ error: "No se recibió ningún archivo" }, { status: 400 });
     }
 
-    console.log("[API upload-pdf] Archivo recibido:", {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    });
+    console.log(`[POST] Archivo recibido: ${file.name}, tamaño: ${file.size} bytes, tipo: ${file.type}`);
 
-    // 4. Generar nombre único
     const fileId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const fileName = `pedido_${fileId}.pdf`;
-    console.log("[API upload-pdf] Nombre generado:", fileName);
+    console.log(`[POST] Nombre de archivo generado: ${fileName}`);
 
-    // 5. Subir a Supabase
-    console.log("[API upload-pdf] Intentando subir a Supabase...");
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    // 2. Subir a Supabase
+    const { error: uploadError } = await supabase.storage
       .from("pedidos_temp")
       .upload(fileName, file, {
         contentType: "application/pdf",
@@ -62,49 +51,38 @@ export async function POST(req: Request) {
       });
 
     if (uploadError) {
-      console.error("[API upload-pdf] Error en upload:", {
-        message: uploadError.message,
-        status: uploadError.status,
-        name: uploadError.name,
-        stack: uploadError.stack,
-      });
+      console.error("[POST] Error al subir a Supabase:", uploadError);
       return NextResponse.json(
-        { error: `Error al subir: ${uploadError.message}` },
+        { error: `Supabase upload error: ${uploadError.message}` },
         { status: 500 }
       );
     }
 
-    console.log("[API upload-pdf] Subida exitosa:", uploadData);
+    console.log(`[POST] Archivo subido exitosamente: ${fileName}`);
 
-    // 6. Construir la URL para el frontend
-    const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    
-    // Si estamos en Vercel, usamos VERCEL_URL
-    let baseUrl = `${protocol}://${host}`;
+    // 3. Construir URL pública de redirección (evitamos depender de cabeceras)
+    // Usamos la variable de entorno VERCEL_URL si existe, o construimos con cabeceras
+    let baseUrl: string;
     if (process.env.VERCEL_URL) {
       baseUrl = `https://${process.env.VERCEL_URL}`;
-      console.log("[API upload-pdf] Usando VERCEL_URL:", baseUrl);
+      console.log(`[POST] Usando VERCEL_URL: ${baseUrl}`);
     } else {
-      console.log("[API upload-pdf] Usando host/protocol:", baseUrl);
+      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
+      const protocol = req.headers.get("x-forwarded-proto") || "http";
+      baseUrl = `${protocol}://${host}`;
+      console.log(`[POST] Usando cabeceras: ${baseUrl}`);
     }
 
     const cleanUrl = `${baseUrl}/pedido/${fileId}`;
-    console.log("[API upload-pdf] URL generada:", cleanUrl);
+    console.log(`[POST] Enlace generado: ${cleanUrl}`);
 
-    // 7. También podemos devolver la URL pública directa (opcional)
-    const { data: publicUrlData } = supabase.storage
-      .from("pedidos_temp")
-      .getPublicUrl(fileName);
-    console.log("[API upload-pdf] URL pública de Supabase:", publicUrlData?.publicUrl);
+    const elapsed = Date.now() - startTime;
+    console.log(`[POST] Subida completada en ${elapsed}ms`);
 
-    return NextResponse.json({
-      link: cleanUrl,
-      supabaseUrl: publicUrlData?.publicUrl, // opcional, por si quieres depurar
-    });
-
+    return NextResponse.json({ link: cleanUrl });
   } catch (error: any) {
-    console.error("[API upload-pdf] Error general:", error);
+    const elapsed = Date.now() - startTime;
+    console.error(`[POST] Error después de ${elapsed}ms:`, error);
     return NextResponse.json(
       { error: error?.message || "Error interno del servidor" },
       { status: 500 }
