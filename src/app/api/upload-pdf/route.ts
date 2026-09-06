@@ -71,25 +71,18 @@ export async function POST(req: Request) {
 
     console.log(`[POST] Archivo subido exitosamente: ${fileName}`);
 
-    // Construir URL pública de redirección
-    let baseUrl: string;
-    if (process.env.VERCEL_URL) {
-      baseUrl = `https://${process.env.VERCEL_URL}`;
-      console.log(`[POST] Usando VERCEL_URL: ${baseUrl}`);
-    } else {
-      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
-      const protocol = req.headers.get("x-forwarded-proto") || "http";
-      baseUrl = `${protocol}://${host}`;
-      console.log(`[POST] Usando cabeceras: ${baseUrl}`);
-    }
+    // Obtener la URL pública directamente desde Supabase
+    const { data: publicUrlData } = supabase.storage
+      .from("pedidos_temp")
+      .getPublicUrl(fileName);
 
-    const cleanUrl = `${baseUrl}/pedido/${fileId}`;
-    console.log(`[POST] Enlace generado: ${cleanUrl}`);
+    const directUrl = publicUrlData.publicUrl;
+    console.log(`[POST] Enlace directo de Supabase generado: ${directUrl}`);
 
     const elapsed = Date.now() - startTime;
     console.log(`[POST] Subida completada en ${elapsed}ms`);
 
-    return NextResponse.json({ link: cleanUrl });
+    return NextResponse.json({ link: directUrl });
   } catch (error: any) {
     const elapsed = Date.now() - startTime;
     console.error(`[POST] Error después de ${elapsed}ms:`, error);
