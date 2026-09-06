@@ -21,12 +21,10 @@ export function Navbar({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("inicio");
 
-  // Ref para saber si el scroll lo causó un clic en el menú
   const isClickScrollRef = useRef(false);
-  // Ref para almacenar el timer de desbloqueo
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Detecta qué sección está visible en la pantalla durante el scroll manual
+  // Observer para detectar sección activa durante scroll manual
   useEffect(() => {
     const observerOptions = {
       root: null,
@@ -35,9 +33,7 @@ export function Navbar({
     };
 
     const observerCallback: IntersectionObserverCallback = (entries) => {
-      // Si el desplazamiento fue causado por un clic, ignoramos las secciones intermedias
       if (isClickScrollRef.current) return;
-
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           setActiveSection(entry.target.id);
@@ -46,7 +42,6 @@ export function Navbar({
     };
 
     const observer = new IntersectionObserver(observerCallback, observerOptions);
-
     LINKS.forEach((link) => {
       const section = document.getElementById(link.targetId);
       if (section) observer.observe(section);
@@ -55,24 +50,25 @@ export function Navbar({
     return () => observer.disconnect();
   }, []);
 
+  // Scroll suave con easing cúbico
   const smoothScrollTo = (targetPosition: number, duration: number) => {
-    const startPosition = window.pageYOffset;
+    const startPosition = window.scrollY;
     const distance = targetPosition - startPosition;
     let startTime: number | null = null;
 
-    const easeInOutQuad = (t: number, b: number, c: number, d: number) => {
-      t /= d / 2;
-      if (t < 1) return (c / 2) * t * t + b;
-      t--;
-      return (-c / 2) * (t * (t - 2) - 1) + b;
+    // Easing easeInOutCubic
+    const easeInOutCubic = (t: number) => {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     };
 
     const animation = (currentTime: number) => {
       if (startTime === null) startTime = currentTime;
       const timeElapsed = currentTime - startTime;
-      const run = easeInOutQuad(timeElapsed, startPosition, distance, duration);
-      window.scrollTo(0, run);
-      if (timeElapsed < duration) {
+      const progress = Math.min(timeElapsed / duration, 1);
+      const easedProgress = easeInOutCubic(progress);
+      const currentPosition = startPosition + distance * easedProgress;
+      window.scrollTo(0, currentPosition);
+      if (progress < 1) {
         requestAnimationFrame(animation);
       }
     };
@@ -83,37 +79,29 @@ export function Navbar({
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
 
-    // 1. Activamos la bandera para bloquear la detección automática mientras viaja la pantalla
+    // Bloquear observer durante el scroll automático
     isClickScrollRef.current = true;
-
-    // 2. Activamos de una el link al que diste clic
     setActiveSection(targetId);
 
     const element = document.getElementById(targetId);
     if (!element) return;
 
-    // Medimos solo la barra superior (.navbar), NO el <header> completo.
-    // Si midiéramos ".site-header" aquí, en móvil incluiría también la altura
-    // del menú desplegable (todavía abierto en este punto, porque React no
-    // actualiza el DOM de forma síncrona al llamar a setMobileOpen). Eso
-    // generaba un offset más grande de lo real y el scroll quedaba
-    // desalineado. La altura de ".navbar" no cambia al abrir/cerrar el menú
-    // móvil, así que el cálculo es consistente en cualquier tamaño de pantalla.
+    // Calcular offset usando la altura del navbar (consistente en todos los tamaños)
     const navbarElement = document.querySelector(".navbar");
     const navOffset = navbarElement ? navbarElement.getBoundingClientRect().height : 0;
 
-    const targetPosition = element.getBoundingClientRect().top + window.pageYOffset - navOffset;
+    // Margen extra de 10px para separar la sección del borde superior
+    const extraMargin = 10;
+    const targetPosition =
+      element.getBoundingClientRect().top + window.scrollY - navOffset - extraMargin;
 
-    // Cerramos el menú móvil después de calcular la posición.
+    // Cerrar menú móvil (el offset ya está calculado)
     setMobileOpen(false);
 
-    const DURATION_MS = 1200;
+    const DURATION_MS = 800; // más ágil
     smoothScrollTo(targetPosition, DURATION_MS);
 
-    // Limpiamos cualquier timeout previo
     if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-
-    // 3. Volvemos a permitir que el scroll manual controle los botones justo al terminar la animación
     scrollTimeoutRef.current = setTimeout(() => {
       isClickScrollRef.current = false;
     }, DURATION_MS + 50);
