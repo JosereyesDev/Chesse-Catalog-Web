@@ -23,8 +23,8 @@ export function Navbar({
 
   // Ref para saber si el scroll lo causó un clic en el menú
   const isClickScrollRef = useRef(false);
-  // Ref para almacenar el timer de desbloqueo
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref para el "watcher" que detecta cuándo el scroll realmente terminó
+  const scrollWatcherRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Detecta qué sección está visible en la pantalla durante el scroll manual
   useEffect(() => {
@@ -55,42 +55,24 @@ export function Navbar({
     return () => observer.disconnect();
   }, []);
 
-  const smoothScrollTo = (targetPosition: number, duration: number) => {
-    const startPosition = window.pageYOffset;
-    const distance = targetPosition - startPosition;
-    let startTime: number | null = null;
-
-    const easeInOutQuad = (t: number, b: number, c: number, d: number) => {
-      t /= d / 2;
-      if (t < 1) return (c / 2) * t * t + b;
-      t--;
-      return (-c / 2) * (t * (t - 2) - 1) + b;
+  // Limpieza del watcher si el componente se desmonta a mitad de un scroll
+  useEffect(() => {
+    return () => {
+      if (scrollWatcherRef.current) clearTimeout(scrollWatcherRef.current);
     };
-
-    const animation = (currentTime: number) => {
-      if (startTime === null) startTime = currentTime;
-      const timeElapsed = currentTime - startTime;
-      const run = easeInOutQuad(timeElapsed, startPosition, distance, duration);
-      window.scrollTo(0, run);
-      if (timeElapsed < duration) {
-        requestAnimationFrame(animation);
-      }
-    };
-
-    requestAnimationFrame(animation);
-  };
+  }, []);
 
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
+
+    const element = document.getElementById(targetId);
+    if (!element) return;
 
     // 1. Activamos la bandera para bloquear la detección automática mientras viaja la pantalla
     isClickScrollRef.current = true;
 
     // 2. Activamos de una el link al que diste clic
     setActiveSection(targetId);
-
-    const element = document.getElementById(targetId);
-    if (!element) return;
 
     // Medimos solo la barra superior (.navbar), NO el <header> completo.
     // Si midiéramos ".site-header" aquí, en móvil incluiría también la altura
@@ -107,16 +89,42 @@ export function Navbar({
     // Cerramos el menú móvil después de calcular la posición.
     setMobileOpen(false);
 
-    const DURATION_MS = 1200;
-    smoothScrollTo(targetPosition, DURATION_MS);
+    // Dejamos que el navegador haga el scroll suave de forma NATIVA.
+    // Esto evita el "se queda pegado y luego salta raro": ya no compiten
+    // dos animaciones a la vez (la nuestra por rAF + la del navegador),
+    // y el scroll corre en el hilo de composición, no se traba con los
+    // re-renders de React que dispara el IntersectionObserver.
+    window.scrollTo({ top: targetPosition, behavior: "smooth" });
 
-    // Limpiamos cualquier timeout previo
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    // 3. Desbloqueamos la detección automática cuando el scroll REALMENTE
+    // termina (dos lecturas seguidas de scrollY sin cambios), en vez de
+    // adivinar con un temporizador fijo que se desincroniza según la
+    // distancia recorrida o el rendimiento del dispositivo.
+    if (scrollWatcherRef.current) clearTimeout(scrollWatcherRef.current);
 
-    // 3. Volvemos a permitir que el scroll manual controle los botones justo al terminar la animación
-    scrollTimeoutRef.current = setTimeout(() => {
-      isClickScrollRef.current = false;
-    }, DURATION_MS + 50);
+    let lastY = window.pageYOffset;
+    let stableTicks = 0;
+
+    const checkScrollEnd = () => {
+      const currentY = window.pageYOffset;
+
+      if (currentY === lastY) {
+        stableTicks += 1;
+      } else {
+        stableTicks = 0;
+        lastY = currentY;
+      }
+
+      // Dos chequeos seguidos (100ms) sin movimiento = el scroll terminó
+      if (stableTicks >= 2) {
+        isClickScrollRef.current = false;
+        return;
+      }
+
+      scrollWatcherRef.current = setTimeout(checkScrollEnd, 100);
+    };
+
+    scrollWatcherRef.current = setTimeout(checkScrollEnd, 100);
   };
 
   return (
