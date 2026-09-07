@@ -2,15 +2,36 @@ import { createClient } from "@/utils/supabase/server";
 import { AdminDashboard } from "./AdminDashboard";
 import { redirect } from "next/navigation";
 
-export const revalidate = 0; // Don't cache admin page
+export const revalidate = 0; // No cachear la página de admin
 
 export default async function AdminPage() {
   const supabase = await createClient();
-  const { data: products, error } = await supabase.from('products').select('*').order('id');
-  
-  if (error) {
-    console.error("Error fetching products", error);
+
+  // Obtener productos
+  const { data: products, error: productsError } = await supabase
+    .from("products")
+    .select("*")
+    .order("id");
+
+  if (productsError) {
+    console.error("Error fetching products", productsError);
   }
 
-  return <AdminDashboard initialProducts={products || []} />;
+  // Obtener categorías (solo los nombres)
+  const { data: categoriesData, error: categoriesError } = await supabase
+    .from("categories")
+    .select("name");
+
+  if (categoriesError) {
+    console.error("Error fetching categories", categoriesError);
+  }
+
+  const categories = categoriesData?.map((c) => c.name) || [];
+
+  return (
+    <AdminDashboard
+      initialProducts={products || []}
+      initialCategories={categories}
+    />
+  );
 }
