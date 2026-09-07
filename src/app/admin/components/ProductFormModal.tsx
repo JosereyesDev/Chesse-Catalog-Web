@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Product } from "@/types";
 import { createClient } from "@/utils/supabase/client";
 import { X, Loader2, ImageOff, Edit2, Plus } from "lucide-react";
@@ -9,12 +9,14 @@ export function ProductFormModal({
   product,
   saving,
   supabase,
+  categories = [],
   onCancel,
   onSubmit,
 }: {
   product: Product;
   saving: boolean;
   supabase: ReturnType<typeof createClient> | null;
+  categories?: string[];
   onCancel: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }) {
@@ -22,6 +24,11 @@ export function ProductFormModal({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const isEditingExisting = !!product.id;
+
+  const categoryOptions = categories;
+  const defaultCategory = product.category && categoryOptions.includes(product.category)
+    ? product.category
+    : "";
 
   const IMAGE_BUCKET = "products";
   const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -133,12 +140,18 @@ export function ProductFormModal({
             </div>
             <div className="admin-form-group">
               <label>Categoría</label>
-              <input
+              <select
                 name="category"
-                type="text"
-                defaultValue={product.category || "Quesos"}
+                defaultValue={defaultCategory}
                 required
-              />
+              >
+                <option value="">Selecciona una categoría</option>
+                {categoryOptions.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="admin-form-group span-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Product } from "@/types";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -29,6 +29,7 @@ export function ProductsPanel({
   supabase: ReturnType<typeof createClient> | null;
 }) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [allCategories, setAllCategories] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState<Product | null>(null);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("Todos");
@@ -36,13 +37,28 @@ export function ProductsPanel({
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast>(null);
 
+  useEffect(() => {
+    if (!supabase) return;
+    const fetchCategories = async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('name')
+        .order('name');
+      if (error) {
+        console.error('Error cargando categorías:', error);
+        return;
+      }
+      setAllCategories(data.map(item => item.name));
+    };
+    fetchCategories();
+  }, [supabase]);
+
   const showToast = (t: Toast) => {
     setToast(t);
     setTimeout(() => setToast(null), 2800);
   };
 
-  // Obtener categorías únicas de los productos
-  const categories = useMemo(
+  const productCategories = useMemo(
     () => ["Todos", ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))],
     [products]
   );
@@ -139,7 +155,6 @@ export function ProductsPanel({
 
   return (
     <div>
-      {/* Alert si no hay conexión */}
       {!supabase && (
         <div className="admin-alert">
           <AlertTriangle size={20} />
@@ -153,7 +168,6 @@ export function ProductsPanel({
         </div>
       )}
 
-      {/* Title + CTA */}
       <div className="admin-title-row">
         <div>
           <h2>Gestión de Productos</h2>
@@ -167,7 +181,6 @@ export function ProductsPanel({
         </button>
       </div>
 
-      {/* Stats */}
       <div className="admin-stats-grid">
         <StatCard
           icon={<Package size={20} />}
@@ -195,7 +208,6 @@ export function ProductsPanel({
         />
       </div>
 
-      {/* Toolbar */}
       <div className="admin-toolbar">
         <div className="admin-search">
           <Search size={16} />
@@ -206,7 +218,7 @@ export function ProductsPanel({
           />
         </div>
         <div className="admin-cat-filters">
-          {categories.map((cat) => (
+          {productCategories.map((cat) => (
             <button
               key={cat}
               onClick={() => setActiveCat(cat)}
@@ -218,18 +230,17 @@ export function ProductsPanel({
         </div>
       </div>
 
-      {/* Modal de producto */}
       {isEditing !== null && (
         <ProductFormModal
           product={isEditing}
           saving={saving}
           supabase={supabase}
+          categories={allCategories}
           onCancel={() => setIsEditing(null)}
           onSubmit={handleSave}
         />
       )}
 
-      {/* Tabla */}
       <div className="admin-table-card">
         <div className="admin-table-scroll">
           <table className="admin-table">
@@ -328,7 +339,6 @@ export function ProductsPanel({
         </div>
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className={`admin-toast ${toast.type}`}>
           {toast.type === "success" ? <Check size={16} /> : <X size={16} />}

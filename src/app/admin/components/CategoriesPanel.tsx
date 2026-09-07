@@ -1,3 +1,4 @@
+// src/app/admin/components/CategoriesPanel.tsx
 "use client";
 
 import { useState, useMemo } from "react";
@@ -16,21 +17,21 @@ import { CategoryFormModal } from "./CategoryFormModal";
 type Toast = { type: "success" | "error"; message: string } | null;
 
 export function CategoriesPanel({
-  initialCategories,
+  initialCategories = [],
   supabase,
+  onUpdateCategories,
 }: {
-  initialCategories: string[];
+  initialCategories?: string[];
   supabase: ReturnType<typeof createClient> | null;
+  onUpdateCategories: (categories: string[]) => void;
 }) {
   const [categories, setCategories] = useState<string[]>(initialCategories);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [editingName, setEditingName] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [deletingName, setDeletingName] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast>(null);
-
-  // Estado para el modal
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [editingName, setEditingName] = useState("");
 
   const showToast = (t: Toast) => {
     setToast(t);
@@ -42,19 +43,41 @@ export function CategoriesPanel({
     [categories]
   );
 
-  // Crear categoría
+  const openCreateModal = () => {
+    setModalMode("create");
+    setEditingName("");
+    setModalOpen(true);
+  };
+
+  const openEditModal = (name: string) => {
+    setModalMode("edit");
+    setEditingName(name);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingName("");
+  };
+
   const handleCreate = async (name: string) => {
     if (!supabase) {
       showToast({ type: "error", message: "Sin conexión a la base de datos" });
+      return;
+    }
+    if (categories.includes(name)) {
+      showToast({ type: "error", message: "La categoría ya existe" });
       return;
     }
     setSaving(true);
     try {
       const { error } = await supabase.from("categories").insert([{ name }]);
       if (error) throw error;
-      setCategories((prev) => [...prev, name]);
-      setModalOpen(false);
+      const newCategories = [...categories, name];
+      setCategories(newCategories);
+      onUpdateCategories(newCategories);
       showToast({ type: "success", message: "Categoría creada" });
+      closeModal();
     } catch (err) {
       console.error(err);
       showToast({ type: "error", message: "No se pudo crear la categoría" });
@@ -63,33 +86,41 @@ export function CategoriesPanel({
     }
   };
 
-  // Actualizar categoría
   const handleUpdate = async (newName: string) => {
     if (!supabase) {
       showToast({ type: "error", message: "Sin conexión a la base de datos" });
       return;
     }
+    if (!editingName) return;
+    if (newName === editingName) {
+      closeModal();
+      return;
+    }
+    if (categories.includes(newName)) {
+      showToast({ type: "error", message: "Ya existe una categoría con ese nombre" });
+      return;
+    }
     setSaving(true);
     try {
-      // Actualizar en categories
       const { error } = await supabase
         .from("categories")
         .update({ name: newName })
         .eq("name", editingName);
       if (error) throw error;
 
-      // Actualizar en productos que usen esta categoría
       const { error: updateProductsError } = await supabase
         .from("products")
         .update({ category: newName })
         .eq("category", editingName);
       if (updateProductsError) throw updateProductsError;
 
-      setCategories((prev) =>
-        prev.map((c) => (c === editingName ? newName : c))
+      const newCategories = categories.map((c) =>
+        c === editingName ? newName : c
       );
-      setModalOpen(false);
+      setCategories(newCategories);
+      onUpdateCategories(newCategories);
       showToast({ type: "success", message: "Categoría actualizada" });
+      closeModal();
     } catch (err) {
       console.error(err);
       showToast({ type: "error", message: "No se pudo actualizar la categoría" });
@@ -98,7 +129,6 @@ export function CategoriesPanel({
     }
   };
 
-  // Eliminar categoría
   const handleDelete = async (name: string) => {
     if (!supabase) {
       showToast({ type: "error", message: "Sin conexión a la base de datos" });
@@ -107,7 +137,6 @@ export function CategoriesPanel({
     if (!confirm(`¿Estás seguro de eliminar la categoría "${name}"?`)) return;
     setDeletingName(name);
     try {
-      // Verificar si hay productos con esta categoría
       const { count, error: countError } = await supabase
         .from("products")
         .select("*", { count: "exact", head: true })
@@ -124,7 +153,9 @@ export function CategoriesPanel({
 
       const { error } = await supabase.from("categories").delete().eq("name", name);
       if (error) throw error;
-      setCategories((prev) => prev.filter((c) => c !== name));
+      const newCategories = categories.filter((c) => c !== name);
+      setCategories(newCategories);
+      onUpdateCategories(newCategories);
       showToast({ type: "success", message: "Categoría eliminada" });
     } catch (err) {
       console.error(err);
@@ -152,18 +183,23 @@ export function CategoriesPanel({
           <p>Administra las categorías disponibles para los productos.</p>
         </div>
         <button
-          onClick={() => {
-            setModalMode("create");
-            setEditingName("");
-            setModalOpen(true);
-          }}
+          onClick={openCreateModal}
           className="admin-btn-add"
         >
           <Plus size={18} /> Nueva Categoría
         </button>
       </div>
 
-      {/* Tabla de categorías */}
+      <CategoryFormModal
+        mode={modalMode}
+        initialName={editingName}
+        isOpen={modalOpen}
+        onClose={closeModal}
+        onSave={modalMode === "create" ? handleCreate : handleUpdate}
+        saving={saving}
+        existingCategories={categories}
+      />
+
       <div className="admin-table-card">
         <div className="admin-table-scroll">
           <table className="admin-table">
@@ -190,11 +226,7 @@ export function CategoriesPanel({
                     <td>
                       <div className="admin-row-actions">
                         <button
-                          onClick={() => {
-                            setModalMode("edit");
-                            setEditingName(name);
-                            setModalOpen(true);
-                          }}
+                          onClick={() => openEditModal(name)}
                           className="admin-action-btn edit"
                           title="Editar"
                         >
@@ -221,17 +253,6 @@ export function CategoriesPanel({
           </table>
         </div>
       </div>
-
-      {/* Modal de categoría */}
-      <CategoryFormModal
-        mode={modalMode}
-        initialName={editingName}
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={modalMode === "create" ? handleCreate : handleUpdate}
-        saving={saving}
-        existingCategories={categories}
-      />
 
       {toast && (
         <div className={`admin-toast ${toast.type}`}>

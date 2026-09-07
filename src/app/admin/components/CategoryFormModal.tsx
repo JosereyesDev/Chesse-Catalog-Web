@@ -12,7 +12,7 @@ export function CategoryFormModal({
   onClose,
   onSave,
   saving,
-  existingCategories,
+  existingCategories = [],
 }: {
   mode: Mode;
   initialName?: string;
@@ -20,12 +20,11 @@ export function CategoryFormModal({
   onClose: () => void;
   onSave: (name: string) => Promise<void>;
   saving: boolean;
-  existingCategories: string[];
+  existingCategories?: string[];
 }) {
   const [name, setName] = useState(initialName);
   const [error, setError] = useState("");
 
-  // Resetear cuando se abre/cierra
   useEffect(() => {
     if (isOpen) {
       setName(initialName);
