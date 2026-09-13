@@ -2622,3 +2622,56 @@ nav.links a.active {
     .admin-form-group.span-2 { grid-column: span 1; }
     .admin-checkbox-row { grid-column: span 1; }
 }
+
+/* ---------- SECCIONES DE CONFIGURACIÓN (extensión) ---------- */
+.admin-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 1.15rem 1.5rem;
+    background: #fafbfd;
+    border-bottom: 1px solid var(--gris-borde);
+}
+.admin-section-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--azul-rey);
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.admin-section-header p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--gris-texto);
+}
+
+/* Ampliar selectores de input para incluir email, url y textarea */
+.admin-form-group input:not([type="checkbox"]):not([type="radio"]),
+.admin-form-group select,
+.admin-form-group textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--gris-borde);
+    border-radius: 12px;
+    background: var(--gris-claro);
+    outline: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--tinta);
+    transition: border-color .15s, background .15s;
+}
+.admin-form-group input:not([type="checkbox"]):not([type="radio"]):focus,
+.admin-form-group select:focus,
+.admin-form-group textarea:focus {
+    border-color: var(--azul-rey);
+    background: var(--blanco);
+    box-shadow: 0 0 0 3px rgba(19, 42, 99, .08);
+}
+
+/* Textarea específico del mapa */
+.admin-form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.4;
+}

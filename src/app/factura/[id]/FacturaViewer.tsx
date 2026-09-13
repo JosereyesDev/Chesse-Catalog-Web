@@ -193,12 +193,6 @@ export function FacturaViewer({ order }: FacturaViewerProps) {
 
         {/* Cuerpo de la Factura */}
         <div style={{ padding: "2rem" }}>
-          {/* Banner de Verificación */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", padding: "0.75rem 1rem", borderRadius: "12px", marginBottom: "1.5rem", fontSize: "0.85rem", fontWeight: 600 }}>
-            <CheckCircle2 size={18} color="#16a34a" />
-            <span>Pedido registrado con éxito en nuestro sistema central.</span>
-          </div>
-
           {/* Datos del Cliente */}
           {(order.customer_name || order.customer_cedula || order.customer_phone || order.customer_address) && (
             <div style={{ background: "#f8fafc", border: "1px solid var(--gris-borde)", borderRadius: "16px", padding: "1.25rem", marginBottom: "1.75rem" }}>

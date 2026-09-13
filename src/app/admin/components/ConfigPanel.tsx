@@ -13,9 +13,9 @@ import {
   MessageCircle,
   MapPin,
   Share2,
-  Globe,
   Info,
-  ExternalLink
+  Settings2,
+  Globe,
 } from "lucide-react";
 
 type Toast = { type: "success" | "error"; message: string } | null;
@@ -78,7 +78,10 @@ export function ConfigPanel({
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || "Error al guardar");
       }
-      showToast({ type: "success", message: "Configuración guardada correctamente" });
+      showToast({
+        type: "success",
+        message: "Configuración guardada correctamente",
+      });
     } catch (err: any) {
       console.error(err);
       showToast({
@@ -109,7 +112,7 @@ export function ConfigPanel({
   }
 
   return (
-    <div style={{ maxWidth: "1000px" }}>
+    <div>
       {!supabase && (
         <div className="admin-alert">
           <AlertTriangle size={20} />
@@ -128,53 +131,28 @@ export function ConfigPanel({
           <AlertTriangle size={20} color="#d97706" />
           <div>
             <strong>Tabla de configuración pendiente en Supabase:</strong> La tabla{" "}
-            <code>site_config</code> aún no se ha creado en tu base de datos.
-            Se están usando los valores predeterminados. Para guardar cambios en la nube,
-            ejecuta el archivo <code>site_config_setup.sql</code> en el SQL Editor de tu proyecto en Supabase.
+            <code>site_config</code> aún no se ha creado en tu base de datos. Se están
+            usando los valores predeterminados. Para guardar cambios en la nube, ejecuta
+            el archivo <code>site_config_setup.sql</code> en el SQL Editor de tu proyecto
+            en Supabase.
           </div>
         </div>
       )}
 
-      {/* Título y Botón Superior */}
-      <div className="admin-title-row" style={{ marginBottom: "2rem" }}>
+      <div className="admin-title-row">
         <div>
           <h2>Configuración del Sitio</h2>
           <p>
-            Modifica la información de contacto, números de WhatsApp, redes sociales y ubicación que se muestran en la tienda.
+            Modifica la información de contacto, números de WhatsApp, redes sociales y
+            ubicación que se muestran en la tienda.
           </p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="admin-btn-save"
-          style={{ minWidth: "160px", justifyContent: "center" }}
-        >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-          {saving ? "Guardando..." : "Guardar cambios"}
-        </button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-        {/* SECCIÓN 1: Canales de Atención y Contacto */}
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: "20px",
-            border: "1px solid var(--gris-borde)",
-            boxShadow: "0 4px 15px rgba(19, 42, 99, 0.04)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "1.25rem 1.5rem",
-              background: "#fafbfd",
-              borderBottom: "1px solid var(--gris-borde)",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {/* SECCIÓN 1: Contacto */}
+        <div className="admin-table-card">
+          <div className="admin-section-header">
             <div
               style={{
                 width: "36px",
@@ -185,22 +163,28 @@ export function ConfigPanel({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               <Phone size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--azul-rey)", fontFamily: "'Baloo 2', sans-serif" }}>
-                Contacto y Atención al Cliente
-              </h3>
-              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--gris-texto)" }}>
-                Estos datos son usados para recibir pedidos por WhatsApp y en los botones de llamada.
+              <h3>Contacto y Atención al Cliente</h3>
+              <p>
+                Estos datos se usan para recibir pedidos por WhatsApp y en los botones de
+                llamada.
               </p>
             </div>
           </div>
 
-          <div style={{ padding: "1.5rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
-            {/* WhatsApp */}
+          <div
+            style={{
+              padding: "1.5rem",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: "1.25rem",
+            }}
+          >
             <div className="admin-form-group">
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <MessageCircle size={15} color="#16a34a" /> WhatsApp de Pedidos
@@ -212,11 +196,10 @@ export function ConfigPanel({
                 onChange={(e) => handleChange("whatsapp_number", e.target.value)}
               />
               <span style={{ fontSize: "0.75rem", color: "var(--gris-texto)" }}>
-                Código de país seguido del número (sin signos +, espacios ni guiones).
+                Código de país seguido del número (sin +, espacios ni guiones).
               </span>
             </div>
 
-            {/* Teléfono */}
             <div className="admin-form-group">
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <Phone size={15} color="var(--azul-rey)" /> Teléfono de Llamadas
@@ -232,8 +215,7 @@ export function ConfigPanel({
               </span>
             </div>
 
-            {/* Correo Electrónico */}
-            <div className="admin-form-group" style={{ gridColumn: "span 1" }}>
+            <div className="admin-form-group">
               <label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <Mail size={15} color="#d97706" /> Correo Electrónico
               </label>
@@ -251,25 +233,8 @@ export function ConfigPanel({
         </div>
 
         {/* SECCIÓN 2: Redes Sociales */}
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: "20px",
-            border: "1px solid var(--gris-borde)",
-            boxShadow: "0 4px 15px rgba(19, 42, 99, 0.04)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "1.25rem 1.5rem",
-              background: "#fafbfd",
-              borderBottom: "1px solid var(--gris-borde)",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
+        <div className="admin-table-card">
+          <div className="admin-section-header">
             <div
               style={{
                 width: "36px",
@@ -280,22 +245,25 @@ export function ConfigPanel({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               <Share2 size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--azul-rey)", fontFamily: "'Baloo 2', sans-serif" }}>
-                Enlaces a Redes Sociales
-              </h3>
-              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--gris-texto)" }}>
-                Conecta tus perfiles sociales en el pie de página de la tienda.
-              </p>
+              <h3>Enlaces a Redes Sociales</h3>
+              <p>Conecta tus perfiles sociales en el pie de página de la tienda.</p>
             </div>
           </div>
 
-          <div style={{ padding: "1.5rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
-            {/* Instagram */}
+          <div
+            style={{
+              padding: "1.5rem",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: "1.25rem",
+            }}
+          >
             <div className="admin-form-group">
               <label>Instagram URL</label>
               <input
@@ -306,7 +274,6 @@ export function ConfigPanel({
               />
             </div>
 
-            {/* Facebook */}
             <div className="admin-form-group">
               <label>Facebook URL</label>
               <input
@@ -317,7 +284,6 @@ export function ConfigPanel({
               />
             </div>
 
-            {/* Twitter / X */}
             <div className="admin-form-group">
               <label>Twitter / X URL</label>
               <input
@@ -328,7 +294,6 @@ export function ConfigPanel({
               />
             </div>
 
-            {/* YouTube */}
             <div className="admin-form-group">
               <label>YouTube URL (opcional)</label>
               <input
@@ -342,25 +307,8 @@ export function ConfigPanel({
         </div>
 
         {/* SECCIÓN 3: Ubicación y Mapa */}
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: "20px",
-            border: "1px solid var(--gris-borde)",
-            boxShadow: "0 4px 15px rgba(19, 42, 99, 0.04)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "1.25rem 1.5rem",
-              background: "#fafbfd",
-              borderBottom: "1px solid var(--gris-borde)",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
+        <div className="admin-table-card">
+          <div className="admin-section-header">
             <div
               style={{
                 width: "36px",
@@ -371,16 +319,16 @@ export function ConfigPanel({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               <MapPin size={18} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--azul-rey)", fontFamily: "'Baloo 2', sans-serif" }}>
-                Ubicación y Mapa Interactivo
-              </h3>
-              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--gris-texto)" }}>
-                Configura el mapa de Google Maps para que los clientes puedan llegar a tu negocio.
+              <h3>Ubicación y Mapa Interactivo</h3>
+              <p>
+                Configura el mapa de Google Maps para que los clientes puedan llegar a tu
+                negocio.
               </p>
             </div>
           </div>
@@ -417,18 +365,35 @@ export function ConfigPanel({
               >
                 <Info size={14} color="var(--azul-cielo-1)" />
                 <span>
-                  Para obtener este enlace: Ve a Google Maps, busca tu ubicación, haz clic en <strong>Compartir</strong>, selecciona <strong>"Incorporar un mapa"</strong> y copia el enlace que aparece dentro de <code>src="..."</code>.
+                  Para obtener este enlace: Ve a Google Maps, busca tu ubicación, haz clic
+                  en <strong>Compartir</strong>, selecciona{" "}
+                  <strong>&quot;Incorporar un mapa&quot;</strong> y copia el enlace que
+                  aparece dentro de <code>src=&quot;...&quot;</code>.
                 </span>
               </div>
             </div>
 
-            {/* Vista previa pequeña si hay URL */}
             {config.map_embed_url && (
               <div style={{ marginTop: "1rem" }}>
-                <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--azul-rey)", display: "block", marginBottom: "6px" }}>
+                <span
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    color: "var(--azul-rey)",
+                    display: "block",
+                    marginBottom: "6px",
+                  }}
+                >
                   Vista previa del mapa:
                 </span>
-                <div style={{ borderRadius: "14px", overflow: "hidden", border: "1px solid var(--gris-borde)", height: "200px" }}>
+                <div
+                  style={{
+                    borderRadius: "14px",
+                    overflow: "hidden",
+                    border: "1px solid var(--gris-borde)",
+                    height: "220px",
+                  }}
+                >
                   <iframe
                     src={config.map_embed_url}
                     width="100%"
@@ -443,26 +408,59 @@ export function ConfigPanel({
         </div>
       </div>
 
-      {/* Botón inferior fijo para comodidad en móviles/pantallas largas */}
-      <div style={{ marginTop: "2rem", display: "flex", justifyContent: "flex-end" }}>
+      {/* Botón inferior */}
+      <div
+        style={{
+          marginTop: "1.5rem",
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
         <button
           onClick={handleSave}
           disabled={saving}
-          className="admin-btn-save"
+          className="admin-btn-add"
           style={{ minWidth: "180px", justifyContent: "center", padding: "12px 24px" }}
         >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+          {saving ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Save size={18} />
+          )}
           {saving ? "Guardando..." : "Guardar todos los cambios"}
         </button>
       </div>
 
-      {/* Toast Notification */}
       {toast && (
         <div className={`admin-toast ${toast.type}`}>
           {toast.type === "success" ? <Check size={16} /> : <X size={16} />}
           {toast.message}
         </div>
       )}
+    </div>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  color: "blue" | "green" | "red" | "yellow";
+}) {
+  return (
+    <div className="admin-stat-card">
+      <div className={`admin-stat-icon ${color}`}>{icon}</div>
+      <div>
+        <div className="admin-stat-value" style={{ fontSize: "1.05rem" }}>
+          {value}
+        </div>
+        <div className="admin-stat-label">{label}</div>
+      </div>
     </div>
   );
 }

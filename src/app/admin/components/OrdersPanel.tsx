@@ -222,49 +222,6 @@ export function OrdersPanel({
         </div>
       </div>
 
-      {/* Estadísticas */}
-      <div className="admin-stats-grid">
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon blue">
-            <Receipt size={22} />
-          </div>
-          <div>
-            <div className="admin-stat-value">{stats.totalCount}</div>
-            <div className="admin-stat-label">Total Facturas</div>
-          </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon green">
-            <DollarSign size={22} />
-          </div>
-          <div>
-            <div className="admin-stat-value">${stats.totalSales.toFixed(2)}</div>
-            <div className="admin-stat-label">Total Facturado</div>
-          </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon yellow">
-            <Scale size={22} />
-          </div>
-          <div>
-            <div className="admin-stat-value">{stats.totalWeight.toFixed(2)} kg</div>
-            <div className="admin-stat-label">Peso Despachado</div>
-          </div>
-        </div>
-
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon blue">
-            <Package size={22} />
-          </div>
-          <div>
-            <div className="admin-stat-value">{stats.totalItems}</div>
-            <div className="admin-stat-label">Artículos Registrados</div>
-          </div>
-        </div>
-      </div>
-
       {/* Barra de Búsqueda */}
       <div className="admin-toolbar" style={{ marginBottom: "1.5rem" }}>
         <div className="admin-search">
