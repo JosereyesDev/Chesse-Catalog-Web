@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { Product } from "@/types";
 import { createClient } from "@/utils/supabase/client";
-import { LogOut, Package, Tags, PlusCircle } from "lucide-react";
+import { LogOut, Package, Tags, Settings, Receipt } from "lucide-react";
 import { ProductsPanel } from "./components/ProductsPanel";
 import { CategoriesPanel } from "./components/CategoriesPanel";
+import { OrdersPanel } from "./components/OrdersPanel";
+import { ConfigPanel } from "./components/ConfigPanel";
 
-type Tab = "products" | "categories";
+type Tab = "products" | "categories" | "orders" | "config";
 
 export function AdminDashboard({
   initialProducts,
@@ -18,7 +20,6 @@ export function AdminDashboard({
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("products");
 
-  // Inicializar Supabase una sola vez
   const [supabase] = useState(() => {
     try {
       return createClient();
@@ -36,13 +37,10 @@ export function AdminDashboard({
 
   return (
     <div className="admin-page">
-      {/* Header común */}
       <div className="admin-header">
         <div className="admin-header-brand">
           <div className="admin-badge">
-            <span role="img" aria-label="cow">
-              🐮
-            </span>
+            <span role="img" aria-label="cow">🐮</span>
           </div>
           <div>
             <h1 className="admin-header-title">Panel Administrativo</h1>
@@ -55,7 +53,6 @@ export function AdminDashboard({
       </div>
 
       <div className="admin-container">
-        {/* Navegación por pestañas */}
         <div className="admin-tabs">
           <button
             className={`admin-tab ${activeTab === "products" ? "active" : ""}`}
@@ -71,22 +68,38 @@ export function AdminDashboard({
             <Tags size={18} />
             Categorías
           </button>
-          {/* Aquí puedes añadir más pestañas en el futuro */}
+          <button
+            className={`admin-tab ${activeTab === "orders" ? "active" : ""}`}
+            onClick={() => setActiveTab("orders")}
+          >
+            <Receipt size={18} />
+            Facturas
+          </button>
+          <button
+            className={`admin-tab ${activeTab === "config" ? "active" : ""}`}
+            onClick={() => setActiveTab("config")}
+          >
+            <Settings size={18} />
+            Configuración
+          </button>
         </div>
 
-        {/* Paneles según pestaña activa */}
         <div className="admin-panel">
           {activeTab === "products" && (
-            <ProductsPanel
-              initialProducts={initialProducts}
-              supabase={supabase}
-            />
+            <ProductsPanel initialProducts={initialProducts} supabase={supabase} />
           )}
           {activeTab === "categories" && (
             <CategoriesPanel
               initialCategories={initialCategories}
               supabase={supabase}
+              onUpdateCategories={() => {}}
             />
+          )}
+          {activeTab === "orders" && (
+            <OrdersPanel supabase={supabase} />
+          )}
+          {activeTab === "config" && (
+            <ConfigPanel supabase={supabase} />
           )}
         </div>
       </div>

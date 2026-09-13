@@ -30,25 +30,26 @@ export function ProductsPanel({
 }) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [allCategories, setAllCategories] = useState<string[]>([]);
-  const [isEditing, setIsEditing] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("Todos");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast>(null);
 
+  // Cargar todas las categorías desde la tabla
   useEffect(() => {
     if (!supabase) return;
     const fetchCategories = async () => {
       const { data, error } = await supabase
-        .from('categories')
-        .select('name')
-        .order('name');
+        .from("categories")
+        .select("name")
+        .order("name");
       if (error) {
-        console.error('Error cargando categorías:', error);
+        console.error("Error cargando categorías:", error);
         return;
       }
-      setAllCategories(data.map(item => item.name));
+      setAllCategories(data.map((item) => item.name));
     };
     fetchCategories();
   }, [supabase]);
@@ -59,7 +60,10 @@ export function ProductsPanel({
   };
 
   const productCategories = useMemo(
-    () => ["Todos", ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))],
+    () => [
+      "Todos",
+      ...Array.from(new Set(products.map((p) => p.category).filter(Boolean))),
+    ],
     [products]
   );
 
@@ -82,49 +86,37 @@ export function ProductsPanel({
     return { total, inStock, outOfStock, cats };
   }, [products]);
 
-  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  // Guardar producto (crear o actualizar)
+  const handleSave = async (productData: Omit<Product, "id">) => {
     if (!supabase) {
       showToast({ type: "error", message: "Sin conexión a la base de datos" });
       return;
     }
     setSaving(true);
-    const formData = new FormData(e.currentTarget);
-    const productData = {
-      name: formData.get("name") as string,
-      description: formData.get("description") as string,
-      base_price: parseFloat(formData.get("base_price") as string),
-      image: (formData.get("image") as string) || null,
-      unit: formData.get("unit") as string,
-      weight_per_unit: parseFloat(formData.get("weight_per_unit") as string),
-      in_stock: formData.get("in_stock") === "on",
-      category: formData.get("category") as string,
-    };
-
     try {
-      if (isEditing?.id) {
+      if (editingProduct?.id) {
+        // Actualizar producto existente
         const { data, error } = await supabase
           .from("products")
           .update(productData)
-          .eq("id", isEditing.id)
+          .eq("id", editingProduct.id)
           .select()
           .single();
-
         if (error) throw error;
         setProducts((prev) => prev.map((p) => (p.id === data.id ? data : p)));
         showToast({ type: "success", message: "Producto actualizado" });
       } else {
+        // Crear nuevo producto
         const { data, error } = await supabase
           .from("products")
           .insert([productData])
           .select()
           .single();
-
         if (error) throw error;
         setProducts((prev) => [...prev, data]);
         showToast({ type: "success", message: "Producto creado" });
       }
-      setIsEditing(null);
+      setEditingProduct(null);
     } catch (err) {
       console.error(err);
       showToast({ type: "error", message: "No se pudo guardar el producto" });
@@ -174,7 +166,7 @@ export function ProductsPanel({
           <p>Administra el catálogo que ven tus clientes.</p>
         </div>
         <button
-          onClick={() => setIsEditing({} as Product)}
+          onClick={() => setEditingProduct({} as Product)}
           className="admin-btn-add"
         >
           <Plus size={18} /> Nuevo Producto
@@ -230,14 +222,14 @@ export function ProductsPanel({
         </div>
       </div>
 
-      {isEditing !== null && (
+      {editingProduct !== null && (
         <ProductFormModal
-          product={isEditing}
+          product={editingProduct}
           saving={saving}
           supabase={supabase}
           categories={allCategories}
-          onCancel={() => setIsEditing(null)}
-          onSubmit={handleSave}
+          onCancel={() => setEditingProduct(null)}
+          onSave={handleSave}
         />
       )}
 
@@ -311,7 +303,7 @@ export function ProductsPanel({
                     <td>
                       <div className="admin-row-actions">
                         <button
-                          onClick={() => setIsEditing(product)}
+                          onClick={() => setEditingProduct(product)}
                           className="admin-action-btn edit"
                           title="Editar"
                         >

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Product } from "@/types";
 import { createClient } from "@/utils/supabase/client";
 import { X, Loader2, ImageOff, Edit2, Plus } from "lucide-react";
+
+type ProductFormData = Omit<Product, "id">;
 
 export function ProductFormModal({
   product,
@@ -11,69 +13,111 @@ export function ProductFormModal({
   supabase,
   categories = [],
   onCancel,
-  onSubmit,
+  onSave,
 }: {
-  product: Product;
+  product: Partial<Product>; // puede ser vacío para nuevo producto
   saving: boolean;
   supabase: ReturnType<typeof createClient> | null;
   categories?: string[];
   onCancel: () => void;
-  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  onSave: (data: ProductFormData) => Promise<void>;
 }) {
-  const [image, setImage] = useState(product.image || "");
+  const [imageUrl, setImageUrl] = useState(product.image || "");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+
   const isEditingExisting = !!product.id;
 
-  const categoryOptions = categories;
-  const defaultCategory = product.category && categoryOptions.includes(product.category)
-    ? product.category
-    : "";
+  // Previsualización local (si hay archivo seleccionado)
+  const previewImage = selectedFile
+    ? URL.createObjectURL(selectedFile)
+    : imageUrl;
 
-  const IMAGE_BUCKET = "products";
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!supabase) {
-      setUploadError("Sin conexión a la base de datos");
-      e.target.value = "";
+    if (!file) {
+      setSelectedFile(null);
       return;
     }
+
     if (!file.type.startsWith("image/")) {
       setUploadError("El archivo debe ser una imagen");
       e.target.value = "";
       return;
     }
-    if (file.size > MAX_IMAGE_SIZE) {
+    if (file.size > 5 * 1024 * 1024) {
       setUploadError("La imagen no debe superar 5MB");
       e.target.value = "";
       return;
     }
 
+    setSelectedFile(file);
     setUploadError("");
-    setUploading(true);
-    try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `${crypto.randomUUID()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from(IMAGE_BUCKET)
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-      if (uploadErr) throw uploadErr;
+    // Limpiar el campo de texto URL si se sube archivo (opcional)
+    // setImageUrl("");
+    e.target.value = "";
+  };
 
-      const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(fileName);
-      setImage(data.publicUrl);
-    } catch (err) {
-      console.error(err);
-      setUploadError(
-        'No se pudo subir la imagen. Verifica que el bucket "products" exista y sea público.'
-      );
-    } finally {
-      setUploading(false);
-      e.target.value = "";
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!supabase) {
+      setUploadError("Sin conexión a la base de datos");
+      return;
     }
+
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get("name") as string;
+    const description = (formData.get("description") as string) || "";
+    const base_price = parseFloat(formData.get("base_price") as string);
+    const category = formData.get("category") as string;
+    const unit = formData.get("unit") as string;
+    const weight_per_unit = parseFloat(formData.get("weight_per_unit") as string);
+    const in_stock = formData.get("in_stock") === "on";
+
+    let finalImageUrl = imageUrl; // URL manual o preexistente
+
+    // Si hay un archivo seleccionado, lo subimos ahora
+    if (selectedFile) {
+      setUploading(true);
+      setUploadError("");
+      try {
+        const ext = selectedFile.name.split(".").pop() || "jpg";
+        const fileName = `${crypto.randomUUID()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("products")
+          .upload(fileName, selectedFile, { cacheControl: "3600", upsert: false });
+        if (uploadErr) throw uploadErr;
+
+        const { data } = supabase.storage.from("products").getPublicUrl(fileName);
+        finalImageUrl = data.publicUrl;
+      } catch (err) {
+        console.error(err);
+        setUploadError(
+          'No se pudo subir la imagen. Verifica que el bucket "products" exista y sea público.'
+        );
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    // Preparar datos del producto
+    const productData: ProductFormData = {
+      name,
+      description,
+      base_price,
+      image: finalImageUrl || null,
+      unit,
+      weight_per_unit,
+      in_stock,
+      category,
+    };
+
+    // Si es edición, necesitamos pasar el id, pero el modal no lo maneja
+    // El padre se encarga de saber si es edición o creación
+    await onSave(productData);
   };
 
   return (
@@ -109,14 +153,14 @@ export function ProductFormModal({
           </div>
         </div>
 
-        <form onSubmit={onSubmit}>
+        <form ref={formRef} onSubmit={handleSubmit}>
           <div className="admin-form-grid">
             <div className="admin-form-group span-2">
               <label>Nombre</label>
               <input
                 name="name"
                 type="text"
-                defaultValue={product.name}
+                defaultValue={product.name || ""}
                 required
               />
             </div>
@@ -134,7 +178,7 @@ export function ProductFormModal({
                 name="base_price"
                 type="number"
                 step="0.01"
-                defaultValue={product.base_price}
+                defaultValue={product.base_price || 0}
                 required
               />
             </div>
@@ -142,11 +186,11 @@ export function ProductFormModal({
               <label>Categoría</label>
               <select
                 name="category"
-                defaultValue={defaultCategory}
+                defaultValue={product.category || ""}
                 required
               >
                 <option value="">Selecciona una categoría</option>
-                {categoryOptions.map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -160,12 +204,12 @@ export function ProductFormModal({
                 <div className="admin-image-preview">
                   {uploading ? (
                     <Loader2 size={18} className="animate-spin" />
-                  ) : image ? (
+                  ) : previewImage ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={image}
+                      src={previewImage}
                       alt="Vista previa"
-                      onError={() => setImage("")}
+                      onError={() => setImageUrl("")}
                     />
                   ) : (
                     <ImageOff size={18} />
@@ -182,9 +226,11 @@ export function ProductFormModal({
                   <input
                     name="image"
                     type="text"
-                    value={image}
+                    value={imageUrl}
                     onChange={(e) => {
-                      setImage(e.target.value);
+                      setImageUrl(e.target.value);
+                      // Si se escribe una URL, se descarta el archivo seleccionado
+                      if (selectedFile) setSelectedFile(null);
                       setUploadError("");
                     }}
                     placeholder="https://... o sube un archivo"
@@ -208,7 +254,7 @@ export function ProductFormModal({
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleFileUpload}
+                      onChange={handleFileSelect}
                       disabled={uploading}
                       style={{ display: "none" }}
                     />
@@ -255,9 +301,19 @@ export function ProductFormModal({
             <button type="button" onClick={onCancel} className="admin-btn-cancel">
               Cancelar
             </button>
-            <button type="submit" disabled={saving} className="admin-btn-save">
-              {saving && <Loader2 size={16} className="animate-spin" />}
-              {saving ? "Guardando..." : "Guardar Producto"}
+            <button
+              type="submit"
+              disabled={saving || uploading}
+              className="admin-btn-save"
+            >
+              {(saving || uploading) && (
+                <Loader2 size={16} className="animate-spin" />
+              )}
+              {uploading
+                ? "Subiendo imagen..."
+                : saving
+                ? "Guardando..."
+                : "Guardar Producto"}
             </button>
           </div>
         </form>

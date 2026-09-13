@@ -127,7 +127,7 @@ export function CustomerModal({
           </div>
 
           <div className={`customer-form-group ${errors.address ? "has-error" : ""}`}>
-            <label htmlFor="customerAddress">Dirección de entrega</label>
+            <label htmlFor="customerAddress">Dirección</label>
             <input
               id="customerAddress"
               type="text"
@@ -136,7 +136,7 @@ export function CustomerModal({
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
-            <span className="customer-form-error">Ingresá la dirección de entrega</span>
+            <span className="customer-form-error">Ingresá la dirección</span>
           </div>
         </form>
 

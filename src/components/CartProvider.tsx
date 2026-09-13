@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { CartSidebar } from "@/components/CartSidebar";
 import { ProductModal } from "@/components/ProductModal";
 import { CustomerModal } from "@/components/CustomerModal";
+import { useSiteConfig } from "@/hooks/useSiteConfig";
 
 export interface CustomerData {
   name?: string;
@@ -22,7 +23,7 @@ declare global {
 
 const CART_STORAGE_KEY = "lacteos_cart_v1";
 const CUSTOMER_STORAGE_KEY = "lacteos_customer_v1";
-const WHATSAPP_NUMBER = "584121234253";
+const DEFAULT_WHATSAPP = "584121234253"; // número por defecto
 
 const CartContext = createContext<{
   cart: CartItem[];
@@ -33,6 +34,10 @@ const CartContext = createContext<{
 });
 
 export const useCart = () => useContext(CartContext);
+
+// ------------------------------------------------------------
+// Funciones auxiliares (PDF, limpieza de texto, subida)
+// ------------------------------------------------------------
 
 function cleanTextForPDF(text: string) {
   if (!text) return "";
@@ -206,55 +211,52 @@ function generateOrderPDF(cart: CartItem[], customerData: CustomerData) {
   return doc;
 }
 
-// Subida de PDF con logs detallados
 async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
   try {
-    console.log("[uploadPdfBlob] Iniciando subida, tamaño del blob:", pdfBlob.size);
-
     const formData = new FormData();
     formData.append("file", pdfBlob, `pedido_${Date.now()}.pdf`);
 
-    console.log("[uploadPdfBlob] Enviando POST a /api/upload-pdf");
     const res = await fetch("/api/upload-pdf", {
       method: "POST",
       body: formData,
     });
 
-    console.log("[uploadPdfBlob] Respuesta recibida, status:", res.status);
-
     if (!res.ok) {
       const errorText = await res.text();
-      console.error("[uploadPdfBlob] Error en la respuesta:", res.status, errorText);
+      console.error("[uploadPdfBlob] Error:", res.status, errorText);
       return null;
     }
 
     const data = await res.json();
-    console.log("[uploadPdfBlob] Datos de la API:", data);
-
-    // Si la API devuelve el campo link, lo usamos; si no, probamos con supabaseUrl
-    if (data.link) {
-      console.log("[uploadPdfBlob] Link obtenido:", data.link);
-      return data.link;
-    } else if (data.supabaseUrl) {
-      console.log("[uploadPdfBlob] Usando URL directa de Supabase:", data.supabaseUrl);
-      return data.supabaseUrl;
-    } else {
-      console.error("[uploadPdfBlob] No se recibió link ni supabaseUrl en la respuesta");
-      return null;
-    }
+    if (data.link) return data.link;
+    if (data.supabaseUrl) return data.supabaseUrl;
+    console.error("[uploadPdfBlob] No se recibió link ni supabaseUrl");
+    return null;
   } catch (error) {
     console.error("[uploadPdfBlob] Excepción:", error);
     return null;
   }
 }
 
+// ------------------------------------------------------------
+// CartProvider principal
+// ------------------------------------------------------------
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  // 🔥 Obtener configuración dinámica
+  const { whatsappClean, loading: configLoading } = useSiteConfig();
+
+  // Log para depuración (se ejecuta cada vez que cambia el número)
+  useEffect(() => {
+    console.log("[CartProvider] whatsappClean obtenido:", whatsappClean);
+  }, [whatsappClean]);
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [savedCustomer, setSavedCustomer] = useState<CustomerData | null>(null);
-  const [isSending, setIsSending] = useState(false); // Estado para feedback al usuario
+  const [isSending, setIsSending] = useState(false);
   const [toast, setToast] = useState({ show: false, title: "", qtyLabel: "", weight: "0.00", subtotal: "0.00 $" });
   const [totalBumpKey, setTotalBumpKey] = useState(0);
   const [badgeBumpKey, setBadgeBumpKey] = useState(0);
@@ -378,83 +380,106 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function submitCustomerForm(data: CustomerData) {
-  setSavedCustomer(data);
-  try {
-    localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data));
-  } catch {}
-  await sendOrderViaWhatsApp(data);
-}
-
-async function sendOrderViaWhatsApp(customerData: CustomerData) {
-  setIsSending(true);
-
-  // 1. Generar PDF
-  const doc = generateOrderPDF(cart, customerData);
-  console.log("[sendOrderViaWhatsApp] Generando PDF...");
-  let pdfUrl: string | null = null;
-
-
-  // 2. Subir PDF a Supabase vía API Route
-  if (doc) {
-    const pdfBlob = doc.output("blob");
-    pdfUrl = await uploadPdfBlob(pdfBlob);
+    setSavedCustomer(data);
+    try {
+      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data));
+    } catch {}
+    await sendOrderViaWhatsApp(data);
   }
 
-  if (doc) {
-    console.log("[sendOrderViaWhatsApp] PDF generado correctamente");
-    const pdfBlob = doc.output("blob");
-    console.log("[sendOrderViaWhatsApp] Tamaño del PDF blob:", pdfBlob.size);
-    pdfUrl = await uploadPdfBlob(pdfBlob);
-    console.log("[sendOrderViaWhatsApp] URL obtenida de uploadPdfBlob:", pdfUrl);
-  } else {
-    console.warn("[sendOrderViaWhatsApp] No se pudo generar el PDF");
+  async function sendOrderViaWhatsApp(customerData: CustomerData) {
+    setIsSending(true);
+
+    // Guardar pedido en base de datos y obtener enlace seguro de factura
+    let facturaUrl: string | null = null;
+    let orderNumberDisplay: string | null = null;
+
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerData,
+          items: cart.map((item) => ({
+            id: item.product.id,
+            name: item.product.name,
+            unit: item.product.unit,
+            weight_per_unit: item.product.weight_per_unit,
+            quantity: item.quantity,
+            base_price: item.product.base_price,
+            total_price: item.quantity * item.product.base_price,
+          })),
+          total_amount: total,
+          total_weight: weight,
+        }),
+      });
+
+      if (res.ok) {
+        const orderData = await res.json();
+        facturaUrl = orderData.url;
+        orderNumberDisplay = orderData.orderNumber;
+        console.log("[sendOrderViaWhatsApp] Pedido registrado con éxito:", facturaUrl);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error("[sendOrderViaWhatsApp] Error al registrar pedido en BD:", errData);
+      }
+    } catch (err) {
+      console.error("[sendOrderViaWhatsApp] Excepción al registrar pedido:", err);
+    }
+
+    // Armar mensaje
+    let message = "🧀 *Nuevo Pedido - Lácteos*\n\n";
+    message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}\n`;
+    if (orderNumberDisplay) {
+      message += `🔖 *N° Pedido:* ${orderNumberDisplay}\n`;
+    }
+    message += "\n";
+
+    if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
+      message += `👤 *Datos del cliente:*\n`;
+      if (customerData.name) message += `Nombre: ${customerData.name}\n`;
+      if (customerData.cedula) message += `Cédula: ${customerData.cedula}\n`;
+      if (customerData.phone) message += `Teléfono: ${customerData.phone}\n`;
+      if (customerData.address) message += `Dirección: ${customerData.address}\n\n`;
+    }
+
+    message += `📋 *Detalle del pedido:*\n━━━━━━━━━━━━━━━━\n`;
+    cart.forEach((item, index) => {
+      const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
+      const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
+      const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
+      message += `${index + 1}. *${item.product.name}*${weightDisplay}\n`;
+      message += `   Cantidad: ${displayQty} ${unitLabel}\n`;
+      message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $\n\n`;
+    });
+    message += `━━━━━━━━━━━━━━━━\n`;
+    message += `📦 *Productos: ${cart.length}*\n`;
+    message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
+    message += `💰 *TOTAL: ${total.toFixed(2)} $*\n\n`;
+
+    if (facturaUrl) {
+      message += `📄 *Ver Factura / Nota de entrega:*\n${facturaUrl}\n\n`;
+    }
+
+    message += `✨ Quedo atento a la confirmación de la entrega.`;
+
+    // 🔥 Número de WhatsApp: usar el dinámico o fallback
+    const phoneNumber = whatsappClean && whatsappClean.length > 0
+      ? whatsappClean
+      : DEFAULT_WHATSAPP;
+
+    console.log("[sendOrderViaWhatsApp] Número a usar:", phoneNumber);
+
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodedMessage}`;
+
+    setIsSending(false);
+    setCart([]);
+    setCustomerModalOpen(false);
+    setIsSidebarOpen(false);
+
+    window.location.href = whatsappAppUrl;
   }
-
-  // 3. Armar el mensaje de texto para WhatsApp
-  let message = "🧀 *Nuevo Pedido - Lácteos*\n\n";
-  message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}\n\n`;
-  if (customerData.name || customerData.address || customerData.cedula || customerData.phone) {
-    message += `👤 *Datos del cliente:*\n`;
-    if (customerData.name) message += `Nombre: ${customerData.name}\n`;
-    if (customerData.cedula) message += `Cédula: ${customerData.cedula}\n`;
-    if (customerData.phone) message += `Teléfono: ${customerData.phone}\n`;
-    if (customerData.address) message += `Dirección: ${customerData.address}\n\n`;
-  }
-
-  message += `📋 *Detalle del pedido:*\n━━━━━━━━━━━━━━━━\n`;
-  cart.forEach((item, index) => {
-    const unitLabel = item.product.unit === "kg" ? "kg" : "unidad";
-    const displayQty = unitLabel === "kg" ? item.quantity.toFixed(1) : Math.round(item.quantity);
-    const weightDisplay = ` (${(item.quantity * item.product.weight_per_unit).toFixed(2)} kg)`;
-    message += `${index + 1}. *${item.product.name}*${weightDisplay}\n`;
-    message += `   Cantidad: ${displayQty} ${unitLabel}\n`;
-    message += `   Precio: ${(item.quantity * item.product.base_price).toFixed(2)} $\n\n`;
-  });
-  message += `━━━━━━━━━━━━━━━━\n`;
-  message += `📦 *Productos: ${cart.length}*\n`;
-  message += `⚖️ *Peso total: ${weight.toFixed(2)} kg*\n`;
-  message += `💰 *TOTAL: ${total.toFixed(2)} $*\n\n`;
-
-  if (pdfUrl) {
-    message += `📄 *Ver nota de entrega (PDF):*\n${pdfUrl}\n\n`;
-  } else {
-    console.warn("No se pudo obtener la URL del PDF para el mensaje");
-  }
-
-  message += `✨ Quedo atento a la confirmación de la entrega.`;
-
-  // Usar encodeURIComponent para evitar que caracteres especiales rompan el link en teléfonos
-  const encodedMessage = encodeURIComponent(message);
-  const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMBER}&text=${encodedMessage}`;
-
-  setIsSending(false);
-  setCart([]);
-  setCustomerModalOpen(false);
-  setIsSidebarOpen(false);
-
-  // Redirigir la ventana actual evita bloqueos de pop-ups en Safari y Chrome móvil
-  window.location.href = whatsappAppUrl;
-}
 
   return (
     <>
@@ -464,7 +489,6 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
         {children}
       </CartContext.Provider>
 
-      {/* Indicador de carga si está subiendo el PDF */}
       {isSending && (
         <div style={{
           position: "fixed",
@@ -487,7 +511,7 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
             animation: "spin 1s linear infinite"
           }}></div>
           <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-          <p style={{ fontWeight: "bold" }}>Generando enlace del PDF y abriendo WhatsApp...</p>
+          <p style={{ fontWeight: "bold" }}>Generando factura y abriendo WhatsApp...</p>
         </div>
       )}
 
@@ -497,15 +521,9 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
         <div className="toast-content">
           <div className="toast-title">{toast.title}</div>
           <div className="toast-sub">
-            <span>
-              📦 <span className="highlight">{toast.qtyLabel}</span>
-            </span>
-            <span>
-              ⚖️ <span className="highlight">{toast.weight}</span> kg
-            </span>
-            <span>
-              💰 <span className="highlight">{toast.subtotal}</span>
-            </span>
+            <span>📦 <span className="highlight">{toast.qtyLabel}</span></span>
+            <span>⚖️ <span className="highlight">{toast.weight}</span> kg</span>
+            <span>💰 <span className="highlight">{toast.subtotal}</span></span>
           </div>
         </div>
       </div>
@@ -515,10 +533,7 @@ async function sendOrderViaWhatsApp(customerData: CustomerData) {
         <div className="cart-fab-ring">
           <div className="cart-fab-icon">
             <i className="fas fa-shopping-basket"></i>
-            <span
-              key={badgeBumpKey}
-              className={`fab-badge ${count === 0 ? "hidden" : "pulse"}`}
-            >
+            <span key={badgeBumpKey} className={`fab-badge ${count === 0 ? "hidden" : "pulse"}`}>
               {count}
             </span>
           </div>

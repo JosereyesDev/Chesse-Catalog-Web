@@ -1,4 +1,9 @@
+"use client";
+
+import { useSiteConfig } from "@/hooks/useSiteConfig";
+
 export function Footer() {
+  const { config } = useSiteConfig();
   return (
     <footer className="site-footer" id="footer">
       <div className="footer-inner">
@@ -24,7 +29,7 @@ export function Footer() {
               <i className="fab fa-instagram"></i>
             </a>
             <a
-              href="https://wa.me/584121234253"
+              href={`https://wa.me/${config.whatsapp_number || "584121234253"}`}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="WhatsApp"
@@ -41,11 +46,11 @@ export function Footer() {
           <h4>Contacto</h4>
           <div className="contact-item">
             <i className="fas fa-phone-alt"></i>
-            <span>+58 412 1234253</span>
+            <span>{config.phone_number || "+58 412 1234253"}</span>
           </div>
           <div className="contact-item">
             <i className="fab fa-whatsapp"></i>
-            <span>+58 412 1234253</span>
+            <span>{config.phone_number || "+58 412 1234253"}</span>
           </div>
           <div className="contact-item">
             <i className="fas fa-map-marker-alt"></i>

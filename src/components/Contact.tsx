@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useSiteConfig } from "@/hooks/useSiteConfig";
 
 export function Contact() {
   const [sent, setSent] = useState(false);
+  const { config } = useSiteConfig();
 
   return (
     <section className="section-padded-alt" id="contacto">
@@ -55,21 +57,21 @@ export function Contact() {
               <i className="fas fa-phone-alt"></i>
               <div className="info-text">
                 <strong>Teléfono</strong>
-                <small>+58 412 1234253</small>
+                <small>{config.phone_number || "+58 412 1234253"}</small>
               </div>
             </div>
             <div className="contact-info-item">
               <i className="fab fa-whatsapp"></i>
               <div className="info-text">
                 <strong>WhatsApp</strong>
-                <small>+58 412 1234253</small>
+                <small>{config.phone_number || "+58 412 1234253"}</small>
               </div>
             </div>
             <div className="contact-info-item">
               <i className="fas fa-envelope"></i>
               <div className="info-text">
                 <strong>Correo electrónico</strong>
-                <small>info@invelrey.com</small>
+                <small>{config.email || "info@invelrey.com"}</small>
               </div>
             </div>
             <div className="contact-info-item">
