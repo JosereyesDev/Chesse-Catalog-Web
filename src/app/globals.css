@@ -2675,3 +2675,85 @@ nav.links a.active {
     min-height: 80px;
     line-height: 1.4;
 }
+
+/* =================================================================
+   ADMIN TABS RESPONSIVE
+================================================================= */
+
+/* Tablet / móvil: los tabs pasan a ser una grid 4x1 con icono arriba */
+@media (max-width: 768px) {
+    .admin-container {
+        padding: 16px 14px 48px;
+    }
+
+    .admin-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        border-bottom: none;
+        margin-bottom: 18px;
+        padding-bottom: 0;
+        overflow: visible;
+    }
+
+    .admin-tab {
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 5px;
+        padding: 10px 4px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.1;
+        text-align: center;
+        border-bottom: none;
+        border: 1px solid var(--gris-borde);
+        border-radius: 12px;
+        background: var(--blanco);
+        color: var(--gris-texto);
+        min-width: 0;
+        overflow: hidden;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .admin-tab svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+    }
+
+    /* Estado activo más visible en móvil (fondo sólido en vez de solo borde inferior) */
+    .admin-tab.active {
+        background: var(--azul-rey);
+        color: var(--blanco);
+        border-color: var(--azul-rey);
+    }
+
+    .admin-tab:hover {
+        background: var(--gris-claro);
+        color: var(--azul-rey);
+    }
+
+    .admin-tab.active:hover {
+        background: var(--azul-rey-2);
+        color: var(--blanco);
+    }
+}
+
+/* Móviles muy pequeños: comprimimos aún más */
+@media (max-width: 380px) {
+    .admin-tab {
+        font-size: 0.65rem;
+        padding: 8px 2px;
+        gap: 4px;
+    }
+
+    .admin-tab svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .admin-tabs {
+        gap: 4px;
+    }
+}
