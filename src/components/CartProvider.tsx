@@ -13,6 +13,7 @@ export interface CustomerData {
   address?: string;
   cedula?: string;
   phone?: string;
+  saveUserPreference?: boolean;
 }
 
 declare global {
@@ -22,8 +23,7 @@ declare global {
 }
 
 const CART_STORAGE_KEY = "lacteos_cart_v1";
-const CUSTOMER_STORAGE_KEY = "lacteos_customer_v1";
-const DEFAULT_WHATSAPP = "584121234253"; // número por defecto
+const DEFAULT_WHATSAPP = "584121234253";
 
 const CartContext = createContext<{
   cart: CartItem[];
@@ -36,7 +36,7 @@ const CartContext = createContext<{
 export const useCart = () => useContext(CartContext);
 
 // ------------------------------------------------------------
-// Funciones auxiliares (PDF, limpieza de texto, subida)
+// Funciones auxiliares (PDF)
 // ------------------------------------------------------------
 
 function cleanTextForPDF(text: string) {
@@ -211,45 +211,12 @@ function generateOrderPDF(cart: CartItem[], customerData: CustomerData) {
   return doc;
 }
 
-async function uploadPdfBlob(pdfBlob: Blob): Promise<string | null> {
-  try {
-    const formData = new FormData();
-    formData.append("file", pdfBlob, `pedido_${Date.now()}.pdf`);
-
-    const res = await fetch("/api/upload-pdf", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error("[uploadPdfBlob] Error:", res.status, errorText);
-      return null;
-    }
-
-    const data = await res.json();
-    if (data.link) return data.link;
-    if (data.supabaseUrl) return data.supabaseUrl;
-    console.error("[uploadPdfBlob] No se recibió link ni supabaseUrl");
-    return null;
-  } catch (error) {
-    console.error("[uploadPdfBlob] Excepción:", error);
-    return null;
-  }
-}
-
 // ------------------------------------------------------------
 // CartProvider principal
 // ------------------------------------------------------------
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  // 🔥 Obtener configuración dinámica
-  const { whatsappClean, loading: configLoading } = useSiteConfig();
-
-  // Log para depuración (se ejecuta cada vez que cambia el número)
-  useEffect(() => {
-    console.log("[CartProvider] whatsappClean obtenido:", whatsappClean);
-  }, [whatsappClean]);
+  const { whatsappClean } = useSiteConfig();
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -270,10 +237,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       const raw = localStorage.getItem(CART_STORAGE_KEY);
       if (raw) setCart(JSON.parse(raw));
-    } catch {}
-    try {
-      const raw = localStorage.getItem(CUSTOMER_STORAGE_KEY);
-      if (raw) setSavedCustomer(JSON.parse(raw));
+
+      // Limpia cualquier dato previo de usuario almacenado en el navegador
+      localStorage.removeItem("lacteos_customer_v1");
     } catch {}
     loaded.current = true;
   }, []);
@@ -333,9 +299,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (!product.in_stock) return;
     setModalProduct(product);
   }
+
   function closeProductModal() {
     setModalProduct(null);
   }
+
   function handleModalAdd(product: Product, qty: number) {
     addToCart(product, qty);
     closeProductModal();
@@ -380,17 +348,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function submitCustomerForm(data: CustomerData) {
+    // Mantiene los datos en memoria únicamente durante la sesión activa
     setSavedCustomer(data);
-    try {
-      localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(data));
-    } catch {}
+
+    // Guardar/Actualizar en Supabase si aceptó la preferencia
+    if (data.saveUserPreference && data.cedula) {
+      try {
+        await fetch("/api/customers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cedula: data.cedula,
+            name: data.name,
+            phone: data.phone,
+            address: data.address,
+          }),
+        });
+      } catch (err) {
+        console.error("[CartProvider] Error guardando usuario en BD:", err);
+      }
+    }
+
     await sendOrderViaWhatsApp(data);
   }
 
   async function sendOrderViaWhatsApp(customerData: CustomerData) {
     setIsSending(true);
 
-    // Guardar pedido en base de datos y obtener enlace seguro de factura
     let facturaUrl: string | null = null;
     let orderNumberDisplay: string | null = null;
 
@@ -418,16 +402,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const orderData = await res.json();
         facturaUrl = orderData.url;
         orderNumberDisplay = orderData.orderNumber;
-        console.log("[sendOrderViaWhatsApp] Pedido registrado con éxito:", facturaUrl);
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        console.error("[sendOrderViaWhatsApp] Error al registrar pedido en BD:", errData);
       }
     } catch (err) {
       console.error("[sendOrderViaWhatsApp] Excepción al registrar pedido:", err);
     }
 
-    // Armar mensaje
     let message = "🧀 *Nuevo Pedido - Lácteos*\n\n";
     message += `📅 *Fecha:* ${new Date().toLocaleDateString("es-ES")}\n`;
     if (orderNumberDisplay) {
@@ -463,13 +442,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     message += `✨ Quedo atento a la confirmación de la entrega.`;
 
-    // 🔥 Número de WhatsApp: usar el dinámico o fallback
-    const phoneNumber = whatsappClean && whatsappClean.length > 0
-      ? whatsappClean
-      : DEFAULT_WHATSAPP;
-
-    console.log("[sendOrderViaWhatsApp] Número a usar:", phoneNumber);
-
+    const phoneNumber = whatsappClean && whatsappClean.length > 0 ? whatsappClean : DEFAULT_WHATSAPP;
     const encodedMessage = encodeURIComponent(message);
     const whatsappAppUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodedMessage}`;
 

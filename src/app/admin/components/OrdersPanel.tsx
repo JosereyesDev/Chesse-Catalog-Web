@@ -9,9 +9,7 @@ import {
   Download,
   Trash2,
   Calendar,
-  User,
   Phone,
-  CreditCard,
   Scale,
   DollarSign,
   Loader2,
@@ -19,8 +17,8 @@ import {
   ExternalLink,
   Check,
   X,
-  MapPin,
-  Package
+  Package,
+  Filter,
 } from "lucide-react";
 import { generateInvoicePDF } from "@/utils/pdf";
 
@@ -47,6 +45,7 @@ interface Order {
 }
 
 type Toast = { type: "success" | "error"; message: string } | null;
+type DateFilter = "all" | "today" | "7days" | "month" | "custom";
 
 export function OrdersPanel({
   supabase,
@@ -59,6 +58,11 @@ export function OrdersPanel({
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [toast, setToast] = useState<Toast>(null);
+
+  // Filtros por fecha
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
 
   const showToast = (t: Toast) => {
     setToast(t);
@@ -90,56 +94,116 @@ export function OrdersPanel({
     fetchOrders();
   }, [supabase]);
 
+  // Filtrado por Búsqueda de Texto y por Fecha
   const filteredOrders = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return orders;
-
     return orders.filter((o) => {
-      const matchesNumber = (o.order_number || "").toLowerCase().includes(q);
-      const matchesName = (o.customer_name || "").toLowerCase().includes(q);
-      const matchesPhone = (o.customer_phone || "").toLowerCase().includes(q);
-      const matchesCedula = (o.customer_cedula || "").toLowerCase().includes(q);
-      const matchesAddress = (o.customer_address || "").toLowerCase().includes(q);
-      return (
-        matchesNumber ||
-        matchesName ||
-        matchesPhone ||
-        matchesCedula ||
-        matchesAddress
-      );
+      // 1. Filtrado de Texto
+      const q = search.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (o.order_number || "").toLowerCase().includes(q) ||
+        (o.customer_name || "").toLowerCase().includes(q) ||
+        (o.customer_phone || "").toLowerCase().includes(q) ||
+        (o.customer_cedula || "").toLowerCase().includes(q) ||
+        (o.customer_address || "").toLowerCase().includes(q);
+
+      if (!matchesSearch) return false;
+
+      // 2. Filtrado de Fecha
+      const orderDate = new Date(o.created_at);
+      const now = new Date();
+
+      if (dateFilter === "today") {
+        return orderDate.toDateString() === now.toDateString();
+      }
+
+      if (dateFilter === "7days") {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        return orderDate >= sevenDaysAgo;
+      }
+
+      if (dateFilter === "month") {
+        return (
+          orderDate.getMonth() === now.getMonth() &&
+          orderDate.getFullYear() === now.getFullYear()
+        );
+      }
+
+      if (dateFilter === "custom") {
+        if (customStartDate && new Date(o.created_at) < new Date(customStartDate)) {
+          return false;
+        }
+        if (
+          customEndDate &&
+          new Date(o.created_at) > new Date(`${customEndDate}T23:59:59`)
+        ) {
+          return false;
+        }
+      }
+
+      return true;
     });
-  }, [orders, search]);
+  }, [orders, search, dateFilter, customStartDate, customEndDate]);
 
   const stats = useMemo(() => {
-    const totalCount = orders.length;
-    const totalSales = orders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-    const totalWeight = orders.reduce((sum, o) => sum + Number(o.total_weight || 0), 0);
-    const totalItems = orders.reduce((sum, o) => sum + (o.items?.length || 0), 0);
+    const totalCount = filteredOrders.length;
+    const totalSales = filteredOrders.reduce(
+      (sum, o) => sum + Number(o.total_amount || 0),
+      0
+    );
+    const totalWeight = filteredOrders.reduce(
+      (sum, o) => sum + Number(o.total_weight || 0),
+      0
+    );
+    const totalItems = filteredOrders.reduce(
+      (sum, o) => sum + (o.items?.length || 0),
+      0
+    );
     return { totalCount, totalSales, totalWeight, totalItems };
-  }, [orders]);
+  }, [filteredOrders]);
 
+  // Función corregida para eliminar factura en Supabase
   const handleDelete = async (order: Order) => {
     if (!supabase) return;
     if (
       !confirm(
-        `¿Estás seguro de eliminar el registro de la factura ${order.order_number}?`
+        `¿Estás seguro de eliminar de forma permanente la factura ${order.order_number}?`
       )
-    )
+    ) {
       return;
+    }
 
     setDeletingId(order.id);
     try {
-      const { error } = await supabase.from("orders").delete().eq("id", order.id);
+      const { error, count } = await supabase
+        .from("orders")
+        .delete({ count: "exact" })
+        .eq("id", order.id);
+
       if (error) throw error;
 
+      // Verificar si realmente se eliminó la fila en la BD
+      if (count === 0) {
+        showToast({
+          type: "error",
+          message: "No se pudo eliminar: Verifica los permisos RLS en Supabase",
+        });
+        fetchOrders();
+        return;
+      }
+
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
-      showToast({ type: "success", message: "Factura eliminada del historial" });
+      showToast({ type: "success", message: "Factura eliminada con éxito" });
       if (selectedOrder?.id === order.id) {
         setSelectedOrder(null);
       }
     } catch (err: any) {
-      console.error(err);
-      showToast({ type: "error", message: "No se pudo eliminar la factura" });
+      console.error("Error al eliminar factura:", err);
+      showToast({
+        type: "error",
+        message: err.message || "Error al eliminar la factura",
+      });
     } finally {
       setDeletingId(null);
     }
@@ -218,21 +282,153 @@ export function OrdersPanel({
       <div className="admin-title-row">
         <div>
           <h2>Facturas Generadas</h2>
-          <p>Consulta, descarga o inspecciona todos los pedidos y facturas emitidas.</p>
+          <p>Consulta, gestiona y exporta todas las facturas emitidas.</p>
         </div>
       </div>
 
-      {/* Barra de Búsqueda */}
-      <div className="admin-toolbar" style={{ marginBottom: "1.5rem" }}>
-        <div className="admin-search">
-          <Search size={18} />
-          <input
-            type="text"
-            placeholder="Buscar por N° Pedido, cliente, teléfono, cédula..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* Estadísticas en tiempo real basadas en filtros */}
+      <div className="admin-stats-grid" style={{ marginBottom: "1.5rem" }}>
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon blue">
+            <Receipt size={22} />
+          </div>
+          <div>
+            <div className="admin-stat-value">{stats.totalCount}</div>
+            <div className="admin-stat-label">Facturas Filtradas</div>
+          </div>
         </div>
+
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon green">
+            <DollarSign size={22} />
+          </div>
+          <div>
+            <div className="admin-stat-value">${stats.totalSales.toFixed(2)}</div>
+            <div className="admin-stat-label">Total Facturado</div>
+          </div>
+        </div>
+
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon yellow">
+            <Scale size={22} />
+          </div>
+          <div>
+            <div className="admin-stat-value">{stats.totalWeight.toFixed(2)} kg</div>
+            <div className="admin-stat-label">Peso Despachado</div>
+          </div>
+        </div>
+
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon blue">
+            <Package size={22} />
+          </div>
+          <div>
+            <div className="admin-stat-value">{stats.totalItems}</div>
+            <div className="admin-stat-label">Artículos Registrados</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Barra de Búsqueda y Filtros de Fecha */}
+      <div
+        className="admin-toolbar"
+        style={{
+          marginBottom: "1.5rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1rem",
+        }}
+      >
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", width: "100%" }}>
+          <div className="admin-search" style={{ flex: 1, minWidth: "280px" }}>
+            <Search size={18} />
+            <input
+              type="text"
+              placeholder="Buscar por N° Pedido, cliente, teléfono, cédula..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Filtros rápidos por fecha */}
+          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+            <Filter size={16} color="var(--azul-rey)" />
+            <button
+              onClick={() => setDateFilter("all")}
+              className={`admin-cat-chip ${dateFilter === "all" ? "active" : ""}`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setDateFilter("today")}
+              className={`admin-cat-chip ${dateFilter === "today" ? "active" : ""}`}
+            >
+              Hoy
+            </button>
+            <button
+              onClick={() => setDateFilter("7days")}
+              className={`admin-cat-chip ${dateFilter === "7days" ? "active" : ""}`}
+            >
+              Últimos 7 días
+            </button>
+            <button
+              onClick={() => setDateFilter("month")}
+              className={`admin-cat-chip ${dateFilter === "month" ? "active" : ""}`}
+            >
+              Este mes
+            </button>
+            <button
+              onClick={() => setDateFilter("custom")}
+              className={`admin-cat-chip ${dateFilter === "custom" ? "active" : ""}`}
+            >
+              Rango
+            </button>
+          </div>
+        </div>
+
+        {/* Inputs de fecha personalizada si selecciona 'Rango' */}
+        {dateFilter === "custom" && (
+          <div
+            style={{
+              display: "flex",
+              gap: "1rem",
+              alignItems: "center",
+              background: "#f8fafc",
+              padding: "0.75rem 1rem",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Desde:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  fontSize: "0.85rem",
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>Hasta:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  fontSize: "0.85rem",
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabla de Facturas */}
@@ -242,8 +438,8 @@ export function OrdersPanel({
             <thead>
               <tr>
                 <th>N° Pedido / Fecha</th>
-                <th>Cliente</th>
-                <th>Contacto</th>
+                <th>Cliente / Documento</th>
+                <th>Contacto / Dirección</th>
                 <th>Artículos</th>
                 <th>Total</th>
                 <th className="right">Acciones</th>
@@ -256,11 +452,7 @@ export function OrdersPanel({
                     <div className="admin-empty">
                       <Receipt size={40} className="icon" style={{ opacity: 0.4 }} />
                       <strong>No se encontraron facturas</strong>
-                      <p>
-                        {search
-                          ? "No hay resultados para el término de búsqueda ingresado."
-                          : "Aún no se han generado pedidos desde la tienda."}
-                      </p>
+                      <p>No hay registros para la búsqueda o rango de fechas seleccionado.</p>
                     </div>
                   </td>
                 </tr>
@@ -299,11 +491,11 @@ export function OrdersPanel({
 
                       <td>
                         <div style={{ fontWeight: 700, color: "var(--azul-rey)" }}>
-                          {order.customer_name || "Cliente general"}
+                          {order.customer_name || "CLIENTE GENERAL"}
                         </div>
                         {order.customer_cedula && (
                           <div style={{ fontSize: "0.75rem", color: "var(--gris-texto)" }}>
-                            C.I.: {order.customer_cedula}
+                            C.I / RIF: {order.customer_cedula}
                           </div>
                         )}
                       </td>
@@ -367,28 +559,24 @@ export function OrdersPanel({
 
                       <td>
                         <div className="admin-row-actions">
-                          {/* Abrir enlace público de la factura */}
                           <a
                             href={`/factura/${order.token}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="admin-action-btn edit"
-                            title="Abrir factura en pestaña nueva"
-                            style={{ display: "inline-flex", alignItems: "center" }}
+                            title="Abrir nota pública"
                           >
                             <ExternalLink size={17} />
                           </a>
 
-                          {/* Ver detalle rápido */}
                           <button
                             onClick={() => setSelectedOrder(order)}
                             className="admin-action-btn edit"
-                            title="Ver detalle del pedido"
+                            title="Ver nota de entrega"
                           >
                             <Eye size={17} />
                           </button>
 
-                          {/* Descargar PDF directamente */}
                           <button
                             onClick={() => handleDownloadPDF(order)}
                             className="admin-action-btn edit"
@@ -397,7 +585,6 @@ export function OrdersPanel({
                             <Download size={17} />
                           </button>
 
-                          {/* Eliminar orden */}
                           <button
                             onClick={() => handleDelete(order)}
                             disabled={deletingId === order.id}
@@ -421,13 +608,13 @@ export function OrdersPanel({
         </div>
       </div>
 
-      {/* Modal de Detalle de Factura */}
+      {/* Modal Visualizador de Factura / Nota de Entrega */}
       {selectedOrder && (
         <div
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            backgroundColor: "rgba(0, 0, 0, 0.6)",
             backdropFilter: "blur(4px)",
             zIndex: 1000,
             display: "flex",
@@ -440,70 +627,74 @@ export function OrdersPanel({
           <div
             style={{
               backgroundColor: "#ffffff",
-              borderRadius: "24px",
+              borderRadius: "16px",
               width: "100%",
-              maxWidth: "600px",
-              maxHeight: "90vh",
+              maxWidth: "680px",
+              maxHeight: "92vh",
               overflowY: "auto",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-              padding: "1.75rem",
-              border: "1px solid var(--gris-borde)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.3)",
+              padding: "2rem",
+              border: "1px solid #cbd5e1",
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Encabezado Estilo Factura Impresa */}
             <div
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
-                borderBottom: "1px solid var(--gris-borde)",
+                alignItems: "flex-start",
+                borderBottom: "2px solid #132a63",
                 paddingBottom: "1rem",
                 marginBottom: "1.25rem",
               }}
             >
               <div>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "var(--amarillo-2, #d99b00)",
-                  }}
-                >
-                  Detalle de Factura
-                </span>
-                <h3
+                <h2
                   style={{
                     margin: 0,
                     fontFamily: "'Baloo 2', sans-serif",
-                    fontSize: "1.3rem",
+                    fontSize: "1.5rem",
                     color: "var(--azul-rey)",
                   }}
                 >
-                  {selectedOrder.order_number}
-                </h3>
+                  INVERSIONES EL REY 2020
+                </h2>
+                <p style={{ margin: "2px 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                  Lácteos de Falcón y Occidente
+                </p>
               </div>
-              <button
-                onClick={() => setSelectedOrder(null)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--gris-texto)",
-                  padding: "0.25rem",
-                }}
-              >
-                <X size={22} />
-              </button>
+
+              <div style={{ textAlign: "right" }}>
+                <span
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 800,
+                    background: "#ffc72c",
+                    color: "#132a63",
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    display: "inline-block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  NOTA DE ENTREGA
+                </span>
+                <div style={{ fontWeight: 800, fontSize: "1.1rem", color: "#132a63" }}>
+                  {selectedOrder.order_number}
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                  Fecha: {new Date(selectedOrder.created_at).toLocaleDateString("es-ES")}
+                </div>
+              </div>
             </div>
 
             {/* Datos del Cliente */}
             <div
               style={{
                 background: "#f8fafc",
-                border: "1px solid var(--gris-borde)",
-                borderRadius: "14px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "12px",
                 padding: "1rem",
                 marginBottom: "1.25rem",
                 fontSize: "0.85rem",
@@ -513,73 +704,78 @@ export function OrdersPanel({
               }}
             >
               <div>
-                <span style={{ color: "var(--gris-texto)" }}>Cliente:</span>{" "}
-                <strong>{selectedOrder.customer_name || "N/A"}</strong>
+                <span style={{ color: "#64748b" }}>Cliente / Razón Social:</span>{" "}
+                <div style={{ fontWeight: 700, color: "#1e293b" }}>
+                  {selectedOrder.customer_name || "CLIENTE GENERAL"}
+                </div>
               </div>
               <div>
-                <span style={{ color: "var(--gris-texto)" }}>Cédula:</span>{" "}
-                <strong>{selectedOrder.customer_cedula || "N/A"}</strong>
+                <span style={{ color: "#64748b" }}>Cédula / RIF:</span>{" "}
+                <div style={{ fontWeight: 700, color: "#1e293b" }}>
+                  {selectedOrder.customer_cedula || "N/A"}
+                </div>
               </div>
               <div>
-                <span style={{ color: "var(--gris-texto)" }}>Teléfono:</span>{" "}
-                <strong>{selectedOrder.customer_phone || "N/A"}</strong>
+                <span style={{ color: "#64748b" }}>Teléfono:</span>{" "}
+                <div style={{ fontWeight: 700, color: "#1e293b" }}>
+                  {selectedOrder.customer_phone || "N/A"}
+                </div>
               </div>
               <div style={{ gridColumn: "span 2" }}>
-                <span style={{ color: "var(--gris-texto)" }}>Dirección:</span>{" "}
-                <strong>{selectedOrder.customer_address || "N/A"}</strong>
+                <span style={{ color: "#64748b" }}>Dirección de Entrega:</span>{" "}
+                <div style={{ fontWeight: 700, color: "#1e293b" }}>
+                  {selectedOrder.customer_address || "N/A"}
+                </div>
               </div>
             </div>
 
-            {/* Lista de Productos */}
-            <h4
-              style={{
-                margin: "0 0 0.5rem",
-                fontSize: "0.9rem",
-                color: "var(--azul-rey)",
-                fontFamily: "'Baloo 2', sans-serif",
-              }}
-            >
-              Artículos del Pedido
-            </h4>
+            {/* Tabla de Artículos */}
             <div
               style={{
-                border: "1px solid var(--gris-borde)",
-                borderRadius: "14px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
                 overflow: "hidden",
                 marginBottom: "1.25rem",
               }}
             >
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                 <thead>
-                  <tr style={{ background: "#f1f5f9", textAlign: "left" }}>
-                    <th style={{ padding: "8px 12px" }}>Producto</th>
-                    <th style={{ padding: "8px 12px", textAlign: "center" }}>Cant.</th>
-                    <th style={{ padding: "8px 12px", textAlign: "right" }}>Precio</th>
-                    <th style={{ padding: "8px 12px", textAlign: "right" }}>Total</th>
+                  <tr style={{ background: "#132a63", color: "#ffffff", textAlign: "left" }}>
+                    <th style={{ padding: "10px 12px" }}>Descripción</th>
+                    <th style={{ padding: "10px 12px", textAlign: "center" }}>Cant.</th>
+                    <th style={{ padding: "10px 12px", textAlign: "right" }}>P. Unit ($)</th>
+                    <th style={{ padding: "10px 12px", textAlign: "right" }}>Total ($)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedOrder.items && selectedOrder.items.length > 0 ? (
                     selectedOrder.items.map((it, idx) => (
-                      <tr key={idx} style={{ borderTop: "1px solid #e2e8f0" }}>
-                        <td style={{ padding: "8px 12px" }}>
-                          <strong>{it.name}</strong>
+                      <tr
+                        key={idx}
+                        style={{
+                          borderTop: "1px solid #f1f5f9",
+                          background: idx % 2 === 0 ? "#ffffff" : "#f8fafc",
+                        }}
+                      >
+                        <td style={{ padding: "10px 12px", fontWeight: 600 }}>
+                          {it.name}
+                          <div style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: 400 }}>
+                            Peso unitario: {it.weight_per_unit || 1} kg
+                          </div>
                         </td>
-                        <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                          {it.unit === "kg"
-                            ? Number(it.quantity).toFixed(1)
-                            : it.quantity}{" "}
+                        <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                          {it.unit === "kg" ? Number(it.quantity).toFixed(1) : it.quantity}{" "}
                           {it.unit === "kg" ? "kg" : "ud."}
                         </td>
-                        <td style={{ padding: "8px 12px", textAlign: "right", color: "#64748b" }}>
+                        <td style={{ padding: "10px 12px", textAlign: "right" }}>
                           ${Number(it.base_price).toFixed(2)}
                         </td>
                         <td
                           style={{
-                            padding: "8px 12px",
+                            padding: "10px 12px",
                             textAlign: "right",
                             fontWeight: 700,
-                            color: "var(--azul-rey)",
+                            color: "#132a63",
                           }}
                         >
                           ${Number(it.total_price).toFixed(2)}
@@ -597,7 +793,7 @@ export function OrdersPanel({
               </table>
             </div>
 
-            {/* Totales */}
+            {/* Resumen Total */}
             <div
               style={{
                 display: "flex",
@@ -605,24 +801,24 @@ export function OrdersPanel({
                 alignItems: "center",
                 background: "#f0fdf4",
                 border: "1px solid #bbf7d0",
-                padding: "1rem",
-                borderRadius: "14px",
-                marginBottom: "1.25rem",
+                padding: "1rem 1.25rem",
+                borderRadius: "12px",
+                marginBottom: "1.5rem",
               }}
             >
               <div style={{ fontSize: "0.85rem", color: "#166534" }}>
-                Peso total: <strong>{Number(selectedOrder.total_weight).toFixed(2)} kg</strong>
+                Peso Total Despachado:{" "}
+                <strong>{Number(selectedOrder.total_weight).toFixed(2)} kg</strong>
               </div>
               <div style={{ textAlign: "right" }}>
                 <span style={{ fontSize: "0.75rem", color: "#166534", fontWeight: 700 }}>
-                  TOTAL A PAGAR
+                  TOTAL FACTURA
                 </span>
                 <div
                   style={{
-                    fontSize: "1.5rem",
+                    fontSize: "1.6rem",
                     fontWeight: 800,
                     color: "var(--azul-rey)",
-                    fontFamily: "'Baloo 2', sans-serif",
                     lineHeight: 1,
                   }}
                 >
@@ -631,28 +827,15 @@ export function OrdersPanel({
               </div>
             </div>
 
-            {/* Acciones dentro del modal */}
+            {/* Acciones */}
             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-              <a
-                href={`/factura/${selectedOrder.token}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 16px",
-                  borderRadius: "999px",
-                  border: "1px solid var(--gris-borde)",
-                  background: "#ffffff",
-                  color: "var(--azul-rey)",
-                  textDecoration: "none",
-                  fontWeight: 700,
-                  fontSize: "0.85rem",
-                }}
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="admin-btn-cancel"
+                style={{ borderRadius: "999px" }}
               >
-                <ExternalLink size={16} /> Ver en Web
-              </a>
+                Cerrar
+              </button>
 
               <button
                 onClick={() => handleDownloadPDF(selectedOrder)}
@@ -677,7 +860,7 @@ export function OrdersPanel({
         </div>
       )}
 
-      {/* Notificación Toast */}
+      {/* Toast Notification */}
       {toast && (
         <div className={`admin-toast ${toast.type}`}>
           {toast.type === "success" ? <Check size={16} /> : <X size={16} />}

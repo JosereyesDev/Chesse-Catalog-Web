@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { Product } from "@/types";
 import { createClient } from "@/utils/supabase/client";
-import { LogOut, Package, Tags, Settings, Receipt } from "lucide-react";
+import { LogOut, Package, Tags, Settings, Receipt, Users } from "lucide-react";
 import { ProductsPanel } from "./components/ProductsPanel";
 import { CategoriesPanel } from "./components/CategoriesPanel";
 import { OrdersPanel } from "./components/OrdersPanel";
 import { ConfigPanel } from "./components/ConfigPanel";
+import { UsersPanel } from "./components/UsersPanel";
 
-type Tab = "products" | "categories" | "orders" | "config";
+type Tab = "products" | "categories" | "orders" | "users" | "config";
 
 export function AdminDashboard({
   initialProducts,
@@ -76,6 +77,13 @@ export function AdminDashboard({
             Facturas
           </button>
           <button
+            className={`admin-tab ${activeTab === "users" ? "active" : ""}`}
+            onClick={() => setActiveTab("users")}
+          >
+            <Users size={18} />
+            Clientes
+          </button>
+          <button
             className={`admin-tab ${activeTab === "config" ? "active" : ""}`}
             onClick={() => setActiveTab("config")}
           >
@@ -97,6 +105,9 @@ export function AdminDashboard({
           )}
           {activeTab === "orders" && (
             <OrdersPanel supabase={supabase} />
+          )}
+          {activeTab === "users" && (
+            <UsersPanel supabase={supabase} />
           )}
           {activeTab === "config" && (
             <ConfigPanel supabase={supabase} />
