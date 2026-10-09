@@ -90,13 +90,12 @@ img { max-width: 100%; }
     height: 40px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, var(--amarillo-2), var(--amarillo) 60%, #d99b00 100%);
+    background: url('/images/logo.png') center / cover no-repeat;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 18px;
     color: var(--azul-rey);
-    border: 2px solid var(--blanco);
 }
 .brandmark .name {
     font-size: 16px;
@@ -2270,12 +2269,11 @@ nav.links a.active {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, var(--amarillo-2), var(--amarillo) 60%, #d99b00 100%);
+    background: url('/images/logo.png') center / cover no-repeat;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.1rem;
-    border: 2px solid var(--blanco);
     flex-shrink: 0;
 }
 .admin-header-title {

@@ -40,9 +40,7 @@ export function AdminDashboard({
     <div className="admin-page">
       <div className="admin-header">
         <div className="admin-header-brand">
-          <div className="admin-badge">
-            <span role="img" aria-label="cow">🐮</span>
-          </div>
+          <div className="admin-badge"></div>
           <div>
             <h1 className="admin-header-title">Panel Administrativo</h1>
             <p className="admin-header-subtitle">Inv. El Rey 2020</p>
